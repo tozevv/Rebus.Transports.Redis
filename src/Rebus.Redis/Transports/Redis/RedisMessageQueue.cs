@@ -21,7 +21,13 @@
         /// <param name="inputQueueName">Name of the input queue.</param>
         public RedisMessageQueue(ConfigurationOptions configOptions, string inputQueueName)
         {
-            this.redis = ConnectionMultiplexer.Connect(configOptions);
+			var tw = new System.IO.StringWriter ();
+			try {
+				this.redis = ConnectionMultiplexer.Connect(configOptions, tw);
+			} catch {
+				throw new Exception(tw.ToString ());
+
+			}
             this.inputQueueName = inputQueueName;
         }
 

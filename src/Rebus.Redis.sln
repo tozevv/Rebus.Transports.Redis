@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rebus.Redis.Tests", "Rebus.Redis.Tests\Rebus.Redis.Tests.csproj", "{8A1FAE43-3D45-4A48-AF99-8503676CEAA8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rebus.Tests.Redis", "Rebus.Tests.Redis\Rebus.Tests.Redis.csproj", "{8A1FAE43-3D45-4A48-AF99-8503676CEAA8}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rebus.Redis", "Rebus.Redis\Rebus.Redis.csproj", "{E245B518-AD87-455B-AB64-EE4F9886B490}"
 EndProject
@@ -24,6 +24,11 @@ Global
 		{E245B518-AD87-455B-AB64-EE4F9886B490}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E245B518-AD87-455B-AB64-EE4F9886B490}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E245B518-AD87-455B-AB64-EE4F9886B490}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+	EndGlobalSection
+	GlobalSection(MonoDevelopProperties) = preSolution
+		StartupItem = Rebus.Redis.Tests\Rebus.Tests.Redis.csproj
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
