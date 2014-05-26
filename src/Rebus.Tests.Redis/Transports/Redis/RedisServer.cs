@@ -50,8 +50,6 @@
         public void Start() 
         {
 			Stop (); // Confirm is not running...
-
-			System.Diagnostics.Debug.WriteLine ("Test");
 	
 			process = Process.Start(new ProcessStartInfo() {
 				FileName = serverCommand,
