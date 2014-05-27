@@ -50,10 +50,9 @@
         {
             IDatabase db = this.redis.GetDatabase();
 
-            var id = db.StringIncrement(MessageCounterKey).ToString();
             var redisMessage = new RedisTransportMessage()
             {
-                Id = id,
+                Id = db.StringIncrement(MessageCounterKey).ToString(),
                 Body = message.Body,
                 Headers = message.Headers,
                 Label = message.Label
@@ -61,17 +60,17 @@
 
             var expiry = GetMessageExpiration(message);
 
-            Send(db, redisMessage, expiry, context);
+            Send(db, destinationQueueName, redisMessage, expiry, context);
         }
 
-        private void Send(IDatabase db, RedisTransportMessage message, TimeSpan? expiry, ITransactionContext context)
+        private void Send(IDatabase db, string destinationQueueName, RedisTransportMessage message, TimeSpan? expiry, ITransactionContext context)
         {
             var serializedMessage = message.Serialize();
 
             var redisTx = db.CreateTransaction();
 
             redisTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
-            redisTx.ListLeftPushAsync(this.inputQueueName, message.Id);
+            redisTx.ListLeftPushAsync(destinationQueueName, message.Id);
 
             if (!context.IsTransactional)
             {
