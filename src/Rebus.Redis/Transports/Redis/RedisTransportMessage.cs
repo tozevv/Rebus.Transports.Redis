@@ -9,11 +9,9 @@
     /// Message record stored in Redis.
     /// </summary>
     [Serializable]
-    internal class RedisTransportStore
+    internal class RedisTransportMessage
     {
         public byte[] Body { get; set; }
-
-        public DateTime ExpirationDateUtc { get; set; }
 
         public IDictionary<string, object> Headers { get; set; }
 
@@ -21,14 +19,14 @@
 
         public string Label { get; set; }
 
-        public static RedisTransportStore Deserialize(string value)
+        public static RedisTransportMessage Deserialize(string value)
         {
             byte[] b = Convert.FromBase64String(value);
             using (var stream = new MemoryStream(b))
             {
                 var formatter = new BinaryFormatter();
                 stream.Seek(0, SeekOrigin.Begin);
-                return (RedisTransportStore)formatter.Deserialize(stream);
+                return (RedisTransportMessage)formatter.Deserialize(stream);
             }
         }
 
