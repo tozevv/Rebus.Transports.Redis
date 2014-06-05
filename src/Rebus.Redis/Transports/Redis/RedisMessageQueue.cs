@@ -11,9 +11,10 @@
     public class RedisMessageQueue : IDuplexTransport, IDisposable
     {
         private const string MessageCounterKey = "rebus_message_counter";
+
         private readonly ConnectionMultiplexer redis;
         private readonly string inputQueueName;
-            
+
         /// <summary>
         /// Initializes a new instance of the <see cref="RedisMessageQueue" /> class.
         /// </summary>
@@ -21,13 +22,17 @@
         /// <param name="inputQueueName">Name of the input queue.</param>
         public RedisMessageQueue(ConfigurationOptions configOptions, string inputQueueName)
         {
-			var tw = new System.IO.StringWriter ();
-			try {
-				this.redis = ConnectionMultiplexer.Connect(configOptions, tw);
-			} catch {
-				throw new Exception(tw.ToString ());
+            var tw = new System.IO.StringWriter();
+            try
+            {
+                this.redis = ConnectionMultiplexer.Connect(configOptions, tw);
+            }
+            catch
+            {
+                throw new Exception(tw.ToString());
 
-			}
+            }
+
             this.inputQueueName = inputQueueName;
         }
 
@@ -44,46 +49,72 @@
         public void Send(string destinationQueueName, TransportMessageToSend message, ITransactionContext context)
         {
             IDatabase db = this.redis.GetDatabase();
-           
-            RedisTransportStore redisStore = new RedisTransportStore() 
+
+            var redisMessage = new RedisTransportMessage()
             {
                 Id = db.StringIncrement(MessageCounterKey).ToString(),
                 Body = message.Body,
                 Headers = message.Headers,
-                Label = message.Label,
-                ExpirationDateUtc = GetMessageExpirationDateUtc(message)
+                Label = message.Label
             };
-                
-            db.ListLeftPush(destinationQueueName, redisStore.Serialize());
+
+            var expiry = GetMessageExpiration(message);
+
+            Send(db, destinationQueueName, redisMessage, expiry, context);
+        }
+
+        private void Send(IDatabase db, string destinationQueueName, RedisTransportMessage message, TimeSpan? expiry, ITransactionContext context)
+        {
+            var serializedMessage = message.Serialize();
+
+            var redisTx = db.CreateTransaction();
+
+            redisTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
+            redisTx.ListLeftPushAsync(destinationQueueName, message.Id);
+
+            if (!context.IsTransactional)
+            {
+                redisTx.Execute();
+            }
+            else
+            {
+                //defer execution until Rebus transaction is committed
+                context.DoCommit += () => redisTx.Execute();
+            }
         }
 
         public ReceivedTransportMessage ReceiveMessage(ITransactionContext context)
         {
+            //ReceiveMessage isn't transactional yet
+
             IDatabase db = this.redis.GetDatabase();
 
-            RedisValue item = db.ListRightPop(this.inputQueueName);
+            RedisValue incomingMessageId = db.ListRightPop(this.inputQueueName);
 
-            if (item == RedisValue.Null)
+            if (incomingMessageId.IsNull)
             {
                 return null;
             }
 
-            RedisTransportStore store = RedisTransportStore.Deserialize(item.ToString());
+            string messageId = incomingMessageId;
 
-            if (store.ExpirationDateUtc >= DateTime.UtcNow)
+            var serializedMessage = db.StringGet(messageId);
+
+            if (serializedMessage.IsNull)
             {
-                return new ReceivedTransportMessage()
-                {
-                    Id = store.Id,
-                    Body = store.Body,
-                    Headers = store.Headers,
-                    Label = store.Label
-                };
-            }
-            else
-            {
+                //means it has expired
                 return null;
             }
+
+            var message = RedisTransportMessage.Deserialize(serializedMessage);
+
+            return new ReceivedTransportMessage()
+            {
+                Id = message.Id,
+                Body = message.Body,
+                Headers = message.Headers,
+                Label = message.Label
+            };
         }
 
         public void Dispose()
@@ -94,17 +125,17 @@
             }
         }
 
-        private static DateTime GetMessageExpirationDateUtc(TransportMessageToSend message)
+        private static TimeSpan? GetMessageExpiration(TransportMessageToSend message)
         {
             object timeoutString = string.Empty;
             if (message.Headers.TryGetValue(Headers.TimeToBeReceived, out timeoutString) &&
                 (timeoutString is string))
             {
-                return DateTime.UtcNow.Add(TimeSpan.Parse(timeoutString as string));
+                return TimeSpan.Parse(timeoutString as string);
             }
             else
             {
-                return DateTime.MaxValue;
+                return null;
             }
         }
     }

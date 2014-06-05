@@ -50,7 +50,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Transports\Redis\RedisMessageQueue.cs" />
     <Compile Include="Transports\Redis\RedisMessageQueueConfigurationExtension.cs" />
-    <Compile Include="Transports\Redis\RedisTransportStore.cs" />
+    <Compile Include="Transports\Redis\RedisTransportMessage.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
