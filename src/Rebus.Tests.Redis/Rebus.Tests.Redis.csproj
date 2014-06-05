@@ -39,6 +39,9 @@
     <Reference Include="nunit.framework">
       <HintPath>..\packages\NUnit.2.6.3\lib\nunit.framework.dll</HintPath>
     </Reference>
+    <Reference Include="StackExchange.Redis">
+      <HintPath>..\packages\StackExchange.Redis.1.0.297\lib\net45\StackExchange.Redis.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -48,9 +51,6 @@
     <Reference Include="System.Xml" />
     <Reference Include="Rebus">
       <HintPath>..\packages\Rebus.0.66.0\lib\NET40\Rebus.dll</HintPath>
-    </Reference>
-    <Reference Include="StackExchange.Redis">
-      <HintPath>..\packages\StackExchange.Redis.1.0.289\lib\net45\StackExchange.Redis.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
@@ -82,8 +82,5 @@
       <Name>Rebus.Redis</Name>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Transports\" />
-    <Folder Include="Transports\Redis\" />
-  </ItemGroup>
+  <ItemGroup />
 </Project>

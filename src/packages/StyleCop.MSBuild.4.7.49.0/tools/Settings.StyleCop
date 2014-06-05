@@ -1,4 +1,4 @@
-<StyleCopSettings Version="105">
+<StyleCopSettings Version="4.3">
   <GlobalSettings>
     <CollectionProperty Name="DeprecatedWords">
       <Value>preprocessor,pre-processor</Value>
@@ -33,51 +33,6 @@
           <Value>ui</Value>
         </CollectionProperty>
       </AnalyzerSettings>
-    </Analyzer>
-    <Analyzer AnalyzerId="StyleCop.CSharp.DocumentationRules">
-      <Rules>
-        <Rule Name="ElementsMustBeDocumented">
-          <RuleSettings>
-            <BooleanProperty Name="Enabled">False</BooleanProperty>
-          </RuleSettings>
-        </Rule>
-        <Rule Name="PropertyDocumentationMustHaveValue">
-          <RuleSettings>
-            <BooleanProperty Name="Enabled">True</BooleanProperty>
-          </RuleSettings>
-        </Rule>
-        <Rule Name="PropertyDocumentationMustHaveValueText">
-          <RuleSettings>
-            <BooleanProperty Name="Enabled">True</BooleanProperty>
-          </RuleSettings>
-        </Rule>
-        <Rule Name="DocumentationTextMustBeginWithACapitalLetter">
-          <RuleSettings>
-            <BooleanProperty Name="Enabled">True</BooleanProperty>
-          </RuleSettings>
-        </Rule>
-        <Rule Name="DocumentationTextMustEndWithAPeriod">
-          <RuleSettings>
-            <BooleanProperty Name="Enabled">True</BooleanProperty>
-          </RuleSettings>
-        </Rule>
-        <Rule Name="DocumentationTextMustMeetMinimumCharacterLength">
-          <RuleSettings>
-            <BooleanProperty Name="Enabled">True</BooleanProperty>
-          </RuleSettings>
-        </Rule>
-        <Rule Name="FileMustHaveHeader">
-          <RuleSettings>
-            <BooleanProperty Name="Enabled">False</BooleanProperty>
-          </RuleSettings>
-        </Rule>
-        <Rule Name="ElementDocumentationMustBeSpelledCorrectly">
-          <RuleSettings>
-            <BooleanProperty Name="Enabled">False</BooleanProperty>
-          </RuleSettings>
-        </Rule>
-      </Rules>
-      <AnalyzerSettings />
     </Analyzer>
   </Analyzers>
 </StyleCopSettings>
