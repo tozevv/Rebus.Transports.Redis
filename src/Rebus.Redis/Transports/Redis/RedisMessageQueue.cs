@@ -85,11 +85,22 @@
 
         public ReceivedTransportMessage ReceiveMessage(ITransactionContext context)
         {
+			string transactionLogQueue = this.inputQueueName + Guid.NewGuid();
+
             //ReceiveMessage isn't transactional yet
 
             IDatabase db = this.redis.GetDatabase();
 
-            RedisValue incomingMessageId = db.ListRightPop(this.inputQueueName);
+			if (context.IsTransactional)
+			{
+				context.AfterRollback += () => {
+					db.ListRightPopLeftPush(transactionLogQueue, this.inputQueueName, CommandFlags.PreferMaster);
+				};
+			}
+
+            RedisValue incomingMessageId = db.ListRightPopLeftPush(this.inputQueueName, 
+				transactionLogQueue, CommandFlags.PreferMaster);
+					
 
             if (incomingMessageId.IsNull)
             {
@@ -102,7 +113,7 @@
 
             if (serializedMessage.IsNull)
             {
-                //means it has expired
+                // means it has expired
                 return null;
             }
 
