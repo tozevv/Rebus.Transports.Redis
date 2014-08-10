@@ -21,7 +21,7 @@
         [TestFixtureSetUp]
         public void Init()
         {
-            server = new RedisServer(6666);
+			server = new RedisServer(6666);
             server.Start();
         }
 

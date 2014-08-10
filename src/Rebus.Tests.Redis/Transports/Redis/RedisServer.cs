@@ -41,8 +41,9 @@
 			{
 				EndPoints =
 				{
-					{ "127.0.0.1", this.port },
+					{ "localhost", this.port },
 				},
+				ResolveDns = true,
 				KeepAlive = 180
 			};
 		}
