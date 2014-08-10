@@ -105,7 +105,7 @@
 			queue.Send(this.queueName, CreateStringMessage(sentMessage), 
 				new NoTransaction()); // simulate other transaction sent the message before
 			var receivedMessageBeforeRollback = GetStringMessage(queue.ReceiveMessage(transactionContext));
-			 // 
+			transactionScope.Dispose();
 			var receivedMessageAfterRollback = GetStringMessage(queue.ReceiveMessage(transactionContext));
 
 			// Assert
