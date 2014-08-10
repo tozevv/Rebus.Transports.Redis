@@ -92,6 +92,47 @@
 		}
 
 		[Test]
+		public void WhenTransactionRolledBack_ReceivedMessageOrderIsKept()
+		{
+			// Arrange
+			string[] sentMessages = new string[] { "message1", "message2", "message3" };
+			string[] receivedMessagesBeforeRollback = new string[sentMessages.Length];
+			string[] receivedMessagesAfterRollback = new string[sentMessages.Length];
+
+			var transactionScope = new TransactionScope();
+			var transactionContext = 
+				new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
+			var queue = new RedisMessageQueue(server.ClientConfiguration, this.queueName);
+
+			// Act
+			foreach (var sentMessage in sentMessages) 
+			{
+				queue.Send(this.queueName, CreateStringMessage(sentMessage), 
+					new NoTransaction()); // simulate other transaction sent the message before
+			}
+
+			for (int i = 0; i < sentMessages.Length; i++) 
+			{
+				receivedMessagesBeforeRollback[i] = GetStringMessage(queue.ReceiveMessage(transactionContext));
+			}
+
+			transactionScope.Dispose(); // rollback
+			transactionScope = new TransactionScope();
+
+			for (int i = 0; i < sentMessages.Length; i++) 
+			{
+				receivedMessagesAfterRollback[i] = GetStringMessage(queue.ReceiveMessage(transactionContext));
+			}
+
+			transactionScope.Complete();
+			transactionScope.Dispose();
+
+			// Assert
+			CollectionAssert.AreEqual(sentMessages, receivedMessagesBeforeRollback, "Receive message failed");
+			CollectionAssert.AreEqual(sentMessages, receivedMessagesAfterRollback, "Receive message rollback order failed");
+		}
+
+		[Test]
 		public void WhenTransactionTimesOut_ReceivedMessageIsKept()
 		{
 			// Arrange
