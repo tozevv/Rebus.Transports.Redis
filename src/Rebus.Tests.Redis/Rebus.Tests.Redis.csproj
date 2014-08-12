@@ -52,7 +52,7 @@
     </Reference>
     <Reference Include="StackExchange.Redis">
       <HintPath  Condition="'$(OS)' != 'Unix'">..\packages\StackExchange.Redis.1.0.322\lib\net45\StackExchange.Redis.dll</HintPath>
-      <HintPath  Condition="'$(OS)' != 'Unix'">..\packages\StackExchange.Redis.Mono\StackExchange.Redis.dll</HintPath>
+      <HintPath  Condition="'$(OS)' == 'Unix'">..\packages\StackExchange.Redis.Mono\StackExchange.Redis.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

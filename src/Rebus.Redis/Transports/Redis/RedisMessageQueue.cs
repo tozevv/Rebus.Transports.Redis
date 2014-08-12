@@ -1,7 +1,9 @@
 ﻿namespace Rebus.Transports.Redis
 {
     using System;
+	using System.Linq;
     using Rebus.Shared;
+    using System.IO;
     using StackExchange.Redis;
 
     /// <summary>
@@ -10,19 +12,19 @@
     /// </summary>
     public class RedisMessageQueue : IDuplexTransport, IDisposable
     {
-        private const string MessageCounterKey = "rebus_message_counter";
-
-        private readonly ConnectionMultiplexer redis;
+        private const string MessageCounterKey = "rebus:message:counter";
+	
+		private readonly ConnectionMultiplexer redis;
         private readonly string inputQueueName;
-
-        /// <summary>
+	    
+		/// <summary>
         /// Initializes a new instance of the <see cref="RedisMessageQueue" /> class.
         /// </summary>
         /// <param name="configOptions">Redis connection configuration options.</param>
         /// <param name="inputQueueName">Name of the input queue.</param>
         public RedisMessageQueue(ConfigurationOptions configOptions, string inputQueueName)
         {
-            var tw = new System.IO.StringWriter();
+            var tw = new StringWriter();
             try
             {
                 this.redis = ConnectionMultiplexer.Connect(configOptions, tw);
@@ -60,64 +62,21 @@
 
             var expiry = GetMessageExpiration(message);
 
-            Send(db, destinationQueueName, redisMessage, expiry, context);
-        }
-
-        private void Send(IDatabase db, string destinationQueueName, RedisTransportMessage message, TimeSpan? expiry, ITransactionContext context)
-        {
-            var serializedMessage = message.Serialize();
-
-            var redisTx = db.CreateTransaction();
-
-            redisTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
-            redisTx.ListLeftPushAsync(destinationQueueName, message.Id);
-
-            if (!context.IsTransactional)
-            {
-                redisTx.Execute();
-            }
-            else
-            {
-                //defer execution until Rebus transaction is committed
-                context.DoCommit += () => redisTx.Execute();
-            }
+            InternalSend(db, destinationQueueName, redisMessage, expiry, context);
         }
 
         public ReceivedTransportMessage ReceiveMessage(ITransactionContext context)
         {
-			string transactionLogQueue = this.inputQueueName + Guid.NewGuid();
+			IDatabase db = this.redis.GetDatabase();
 
-            //ReceiveMessage isn't transactional yet
+			var serializedMessage = InternalReceive(db, context);
 
-            IDatabase db = this.redis.GetDatabase();
-
-			if (context.IsTransactional)
+			if (serializedMessage.IsNull) 
 			{
-				context.AfterRollback += () => {
-					db.ListRightPopLeftPush(transactionLogQueue, this.inputQueueName, CommandFlags.PreferMaster);
-				};
+				return null;
 			}
 
-            RedisValue incomingMessageId = db.ListRightPopLeftPush(this.inputQueueName, 
-				transactionLogQueue, CommandFlags.PreferMaster);
-					
-
-            if (incomingMessageId.IsNull)
-            {
-                return null;
-            }
-
-            string messageId = incomingMessageId;
-
-            var serializedMessage = db.StringGet(messageId);
-
-            if (serializedMessage.IsNull)
-            {
-                // means it has expired
-                return null;
-            }
-
-            var message = RedisTransportMessage.Deserialize(serializedMessage);
+			var message = RedisTransportMessage.Deserialize(serializedMessage.ToString());
 
             return new ReceivedTransportMessage()
             {
@@ -135,6 +94,87 @@
                 this.redis.Dispose();
             }
         }
+
+		private void InternalSend(IDatabase db, string destinationQueueName, RedisTransportMessage message, TimeSpan? expiry, ITransactionContext context)
+		{
+			var serializedMessage = message.Serialize();
+
+			var redisTx = context.IsTransactional ? 
+				RedisTransactionContext.GetFromTransactionContext(db, context).Transaction :
+				db.CreateTransaction();
+
+			MessageQueueKey messageQueueKey = new MessageQueueKey(destinationQueueName);
+
+			redisTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
+			redisTx.ListLeftPushAsync(messageQueueKey.Key, message.Id);
+
+			if (!context.IsTransactional) 
+			{
+				redisTx.Execute();
+			} 
+		}
+
+		private RedisValue InternalReceive(IDatabase db, ITransactionContext context)
+		{
+			RedisValue incomingMessageId;
+
+			PurgeTransactionLog();
+
+			MessageQueueKey messageQueue = new MessageQueueKey(this.inputQueueName);
+
+			if (context.IsTransactional) 
+			{
+				PurgeTransactionLog();
+
+				var transactionContext = RedisTransactionContext.GetFromTransactionContext(db, context);
+                MessageQueueTransactionKey messageQueueTransaction = new MessageQueueTransactionKey(this.inputQueueName, transactionContext.TransactionId);
+				incomingMessageId = db.ListRightPopLeftPush(messageQueue.Key, messageQueueTransaction.Key, CommandFlags.PreferMaster);
+
+				context.BeforeCommit += () =>  
+				{
+					// add read messages to delete on commit
+					//transactionContext.Transaction.KeyDeleteAsync(incomingMessageId);
+				};
+
+				context.AfterRollback += () =>  
+				{
+					db.ListRightPopLeftPush(messageQueueTransaction.Key, messageQueue.Key, CommandFlags.PreferMaster);
+				};
+			} 
+			else 
+			{
+				incomingMessageId = db.ListRightPop(messageQueue.Key, CommandFlags.PreferMaster);
+			}
+
+			if (incomingMessageId.IsNull)
+			{
+				// empty queue
+				return RedisValue.Null;
+			}
+
+			return db.StringGet(incomingMessageId.ToString());
+		}
+
+		private void PurgeTransactionLog()
+		{
+			// TODO: need to do this only "sometimes"; add some kind of waiver on elapsed time;
+
+			IDatabase db = this.redis.GetDatabase();
+            IServer server = this.redis.GetServer(this.redis.GetEndPoints().First());
+
+            var transactionQueueKeys = server.Keys(0, MessageQueueTransactionKey.MatchPattern);
+
+			foreach (var transactionQueueKey in transactionQueueKeys)
+			{
+				var transactionQueue = new MessageQueueTransactionKey(transactionQueueKey);
+
+				if (!RedisTransactionContext.IsTransactionActive(db, transactionQueue.TransactionId))
+				{
+					MessageQueueKey messageQueue = transactionQueue.MessageQueue;
+					db.ListRightPopLeftPush(transactionQueue.Key, messageQueue.Key, CommandFlags.PreferMaster);
+				}
+			}
+		}
 
         private static TimeSpan? GetMessageExpiration(TransportMessageToSend message)
         {
