@@ -144,36 +144,46 @@
                 RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, transactionContext.TransactionId);    
                 incomingMessageId = db.ListRightPopLeftPush(queueKey, rollbackQueueKey, CommandFlags.PreferMaster);
 
-                if (!incomingMessageId.IsNull)
+                if (incomingMessageId.IsNull)
                 {
-                    // ok, a message was read and the transaction commited
-                    // schedule the key for deletion in the single transaction commit
-                    context.BeforeCommit += () =>
-                    {
-                        // add read messages to delete on commit
-                        transactionContext.Transaction.KeyDeleteAsync(incomingMessageId.ToString());
-                    };
+                    return RedisValue.Null;
+                }
 
-                    context.AfterRollback += () =>
-                    {
-                        // atomically rollback, moving the message id back to the 
-                        db.ListRightPopLeftPush(rollbackQueueKey, queueKey, CommandFlags.PreferMaster);
-                    };
-                }            
+                // ok, a message was read and the transaction commited
+                // schedule the key for deletion in the single transaction commit
+                context.BeforeCommit += () =>
+                {
+                    // add read messages to delete on commit
+                    transactionContext.Transaction.KeyDeleteAsync(incomingMessageId.ToString());
+                    transactionContext.Transaction.ListRightPopAsync(rollbackQueueKey);
+                };
+                        
+                context.DoRollback += () =>
+                {
+                    // atomically rollback, moving the message id back to the queue
+                    db.ListRightPopLeftPush(rollbackQueueKey, queueKey, CommandFlags.PreferMaster);
+                };
+
+                var message = db.StringGet(incomingMessageId.ToString());
+
+                return message;
             }
             else
             {
                 // no transaction here, just retrieve the key id from que Redis list
                 incomingMessageId = db.ListRightPop(queueKey, CommandFlags.PreferMaster);
-            }
 
-            if (incomingMessageId.IsNull)
-            {
-                // empty queue
-                return RedisValue.Null;
-            }
+                if (incomingMessageId.IsNull)
+                {
+                    // empty queue
+                    return RedisValue.Null;
+                }
+                var message = db.StringGet(incomingMessageId.ToString());
 
-            return db.StringGet(incomingMessageId.ToString());
+                db.KeyDelete(incomingMessageId.ToString());
+
+                return message;
+            }
         }
 
         private void PurgeRollbackLog()

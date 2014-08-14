@@ -76,7 +76,7 @@ namespace Rebus.Transports.Redis
 
 		public void Rollback()
 		{
-
+            this.db.KeyDelete(string.Format(TransactionLockKey, transactionId));
 		}
 
 		public void SetTimeout(TimeSpan timeout)

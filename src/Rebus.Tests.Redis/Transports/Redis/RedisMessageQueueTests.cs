@@ -52,17 +52,30 @@
 			// Arrange
             string queueName = "WhenTransactionCommitted_MessageIsSent";
 			string sentMessage = "message";
-            var transactionScope = new TransactionScope();
-            var transactionContext = 
-				new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
-			var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
+            var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
+            string receivedBeforeCommit = null;
+            string receivedAfterCommit = null;
 
 			// Act
-            queue.Send(queueName, CreateStringMessage(sentMessage), transactionContext);
-            var receivedBeforeCommit = GetStringMessage(queue.ReceiveMessage(transactionContext));
-			transactionScope.Complete();
-			transactionScope.Dispose();
-			var receivedAfterCommit = GetStringMessage(queue.ReceiveMessage(transactionContext));
+            using (var transactionScope = new TransactionScope())
+            {
+                var transactionContext = 
+                    new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
+
+                queue.Send(queueName, CreateStringMessage(sentMessage), transactionContext);
+                receivedBeforeCommit = GetStringMessage(queue.ReceiveMessage(transactionContext));
+                transactionScope.Complete();
+                transactionScope.Dispose();
+            }
+
+            using (var transactionScope = new TransactionScope())
+            {
+                var transactionContext = 
+                    new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
+
+                receivedAfterCommit = GetStringMessage(queue.ReceiveMessage(transactionContext));
+                transactionScope.Complete();
+            }
 
 			// Assert
 			Assert.IsNull(receivedBeforeCommit);
@@ -75,17 +88,30 @@
 			// Arrange
             string queueName = "WhenTransactionRolledBack_ReceivedMessageIsKept";
 			string sentMessage = "message";
-			var transactionScope = new TransactionScope();
-			var transactionContext = 
-				new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
 			var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
-		
+            string receivedMessageBeforeRollback = null;
+            string receivedMessageAfterRollback = null;
+
 			// Act
-			queue.Send(queueName, CreateStringMessage(sentMessage), 
-				new NoTransaction()); // simulate other transaction sent the message before
-			var receivedMessageBeforeRollback = GetStringMessage(queue.ReceiveMessage(transactionContext));
-			transactionScope.Dispose(); // rollback
-			var receivedMessageAfterRollback = GetStringMessage(queue.ReceiveMessage(transactionContext));
+            using (var transactionScope = new TransactionScope())
+            {
+                var transactionContext = 
+                    new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
+
+                queue.Send(queueName, CreateStringMessage(sentMessage), 
+                    new NoTransaction()); // simulate other transaction sent the message before
+                receivedMessageBeforeRollback = GetStringMessage(queue.ReceiveMessage(transactionContext));
+
+                // rollback
+            }
+            using (var transactionScope = new TransactionScope())
+            {
+                var transactionContext = 
+                    new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
+
+                receivedMessageAfterRollback = GetStringMessage(queue.ReceiveMessage(transactionContext));
+                transactionScope.Complete();
+            }
 
 			// Assert
 			Assert.AreEqual(sentMessage, receivedMessageBeforeRollback, "Receive message failed");
