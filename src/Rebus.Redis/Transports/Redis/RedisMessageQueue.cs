@@ -23,7 +23,7 @@
         private const string MessageCounterKeyFormat = "rebus:message:counter";
         private const string QueueKeyFormat = "rebus:queue:{0}";
         private const string RollbackQueueKeyFormat = "rebus:queue:{0}:rollback:{1}";
-
+        private const string RedisContextKey = "redis_context";
 
         private readonly ConnectionMultiplexer redis;
         private readonly string inputQueueName;
@@ -109,20 +109,21 @@
         private void InternalSend(IDatabase db, string destinationQueueName, RedisTransportMessage message, TimeSpan? expiry, ITransactionContext context)
         {
             var serializedMessage = message.Serialize();
-
-            var redisTx = context.IsTransactional ? 
-				RedisTransactionContext.GetFromTransactionContext(db, context).Transaction :
-				db.CreateTransaction();
-
             RedisKey queueKey = string.Format(QueueKeyFormat, destinationQueueName);
 
-            redisTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
-            redisTx.ListLeftPushAsync(queueKey, message.Id);
-
-            if (!context.IsTransactional)
+            if (context.IsTransactional)
             {
-                redisTx.Execute();
-            } 
+                var commitTx = GetRedisTransaction(db, context).CommitTx;
+                commitTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
+                commitTx.ListLeftPushAsync(queueKey, message.Id);
+            }
+            else
+            {
+                var commitTx = db.CreateTransaction();
+                commitTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
+                commitTx.ListLeftPushAsync(queueKey, message.Id);
+                commitTx.Execute();
+            }
         }
 
         private RedisValue InternalReceive(IDatabase db, ITransactionContext context)
@@ -138,10 +139,10 @@
                 // purge rollback log from previous calls
                 PurgeRollbackLog();
 
-                var transactionContext = RedisTransactionContext.GetFromTransactionContext(db, context);
+                var redisTransaction = GetRedisTransaction(db, context);
    
                 // atomically copy message id from queue to specific transaction rollback queue
-                RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, transactionContext.TransactionId);    
+                RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, redisTransaction.TransactionId);    
                 incomingMessageId = db.ListRightPopLeftPush(queueKey, rollbackQueueKey, CommandFlags.PreferMaster);
 
                 if (incomingMessageId.IsNull)
@@ -154,14 +155,14 @@
                 context.BeforeCommit += () =>
                 {
                     // add read messages to delete on commit
-                    transactionContext.Transaction.KeyDeleteAsync(incomingMessageId.ToString());
-                    transactionContext.Transaction.ListRightPopAsync(rollbackQueueKey);
+                    redisTransaction.CommitTx.KeyDeleteAsync(incomingMessageId.ToString());
+                    redisTransaction.CommitTx.ListRightPopAsync(rollbackQueueKey);
                 };
                         
                 context.DoRollback += () =>
                 {
                     // atomically rollback, moving the message id back to the queue
-                    db.ListRightPopLeftPush(rollbackQueueKey, queueKey, CommandFlags.PreferMaster);
+                    redisTransaction.RollbackTx.ListRightPopLeftPushAsync(rollbackQueueKey, queueKey, CommandFlags.PreferMaster);
                 };
 
                 var message = db.StringGet(incomingMessageId.ToString());
@@ -204,7 +205,7 @@
                 string inputQueueName = rollbackQueueString.ParseFormat(RollbackQueueKeyFormat, 0);
                 long transactionId = long.Parse(rollbackQueueString.ParseFormat(RollbackQueueKeyFormat, 1));
          
-                if (!RedisTransactionContext.IsTransactionActive(db, transactionId))
+                if (!RedisTransaction.IsTransactionActive(db, transactionId))
                 {
                     RedisKey queueKey = string.Format(QueueKeyFormat, inputQueueName);
 
@@ -228,6 +229,35 @@
             {
                 return null;
             }
+        }
+
+        private static RedisTransaction GetRedisTransaction(IDatabase db, ITransactionContext context)
+        {
+            if (!context.IsTransactional)
+            {
+                throw new ArgumentException("Context is not transactional");
+            }
+
+            // locking not needed here 
+            // assuming 1-to-1 relathionship between current worker and context
+            var redisTransaction = context[RedisContextKey] as RedisTransaction;
+            if (redisTransaction == null)
+            {
+                redisTransaction = new RedisTransaction(db, TimeSpan.FromMinutes(1));
+
+                context[RedisContextKey] = redisTransaction;
+
+                context.DoCommit += () =>
+                {
+                    redisTransaction.Commit();
+                };
+
+                context.DoRollback += () =>
+                {
+                    redisTransaction.Rollback();
+                };
+            }
+            return redisTransaction;
         }
     }
 }
