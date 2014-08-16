@@ -1,4 +1,8 @@
-﻿namespace Rebus.Tests.Transports.Redis
+﻿using System.Threading.Tasks;
+using System.Diagnostics;
+using System.Threading;
+
+namespace Rebus.Tests.Transports.Redis
 {
     using System.Text;
 
@@ -182,6 +186,41 @@
 			Assert.AreEqual(sentMessage, receivedMessageBeforeRollback, "Receive message failed");
 			Assert.AreEqual(sentMessage, receivedMessageAfterRollback, "Receive message rollback failed");
 		}
+
+        [Test]
+        public void SendReceiveThroughput()
+        {
+            // Arrange
+            string queueName = "Throughput";
+            var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
+            Stopwatch sw = new Stopwatch();
+            long sentMessages = 0;
+            long receivedMessages = 0;
+
+            // Act
+            sw.Start();
+     
+            var transactionContext = new NoTransaction();
+            var message = CreateStringMessage("simple message");
+
+            for (int i = 0; i < 500; i++)
+            {
+                queue.Send(queueName, message, transactionContext);
+                Interlocked.Increment(ref sentMessages);
+            }   
+               
+            for (int i = 0; i < sentMessages; i++)
+            {
+                var msg = queue.ReceiveMessage(transactionContext);
+                if (msg != null) Interlocked.Increment(ref receivedMessages);
+            }
+                   
+            sw.Stop();
+
+            // Assert
+            Assert.AreEqual(sentMessages, receivedMessages);
+            Assert.Pass(string.Format("Throughput of {0} messages / sec", receivedMessages / sw.Elapsed.TotalSeconds));
+        }
 
         protected TransportMessageToSend CreateStringMessage(string contents)
         {
