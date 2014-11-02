@@ -195,7 +195,6 @@ namespace Rebus.Tests.Transports.Redis
             var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
             Stopwatch sw = new Stopwatch();
             long sentMessages = 0;
-            long receivedMessages = 0;
 
             // Act
             sw.Start();
@@ -203,23 +202,15 @@ namespace Rebus.Tests.Transports.Redis
             var transactionContext = new NoTransaction();
             var message = CreateStringMessage("simple message");
 
-            for (int i = 0; i < 500; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 queue.Send(queueName, message, transactionContext);
                 Interlocked.Increment(ref sentMessages);
             }   
-               
-            for (int i = 0; i < sentMessages; i++)
-            {
-                var msg = queue.ReceiveMessage(transactionContext);
-                if (msg != null) Interlocked.Increment(ref receivedMessages);
-            }
                    
             sw.Stop();
 
-            // Assert
-            Assert.AreEqual(sentMessages, receivedMessages);
-            Assert.Pass(string.Format("Throughput of {0} messages / sec", receivedMessages / sw.Elapsed.TotalSeconds));
+            Assert.Pass(string.Format("Throughput of {0} messages / sec", sentMessages / sw.Elapsed.TotalSeconds));
         }
 
         protected TransportMessageToSend CreateStringMessage(string contents)

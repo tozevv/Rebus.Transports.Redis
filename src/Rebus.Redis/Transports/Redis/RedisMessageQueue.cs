@@ -62,10 +62,12 @@
         public void Send(string destinationQueueName, TransportMessageToSend message, ITransactionContext context)
         {
             IDatabase db = this.redis.GetDatabase();
+      
+            var id = db.StringIncrement(MessageCounterKeyFormat);
 
             var redisMessage = new RedisTransportMessage()
             {
-                Id = db.StringIncrement(MessageCounterKeyFormat).ToString(),
+                Id = id.ToString(),
                 Body = message.Body,
                 Headers = message.Headers,
                 Label = message.Label
@@ -73,7 +75,7 @@
 
             var expiry = GetMessageExpiration(message);
 
-            InternalSend(db, destinationQueueName, redisMessage, expiry, context);
+            InternalSend(db, destinationQueueName, redisMessage, expiry, context); 
         }
 
         public ReceivedTransportMessage ReceiveMessage(ITransactionContext context)
@@ -122,7 +124,7 @@
                 var commitTx = db.CreateTransaction();
                 commitTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
                 commitTx.ListLeftPushAsync(queueKey, message.Id);
-                commitTx.Execute();
+                commitTx.ExecuteAsync();
             }
         }
 
