@@ -5,6 +5,7 @@
     using Rebus.Shared;
     using System.IO;
     using StackExchange.Redis;
+    using MsgPack.Serialization;
 
     /// <summary>
     /// Implementation of a DuplexTransport using Redis List with push / pop operations.
@@ -27,7 +28,7 @@
 
         private readonly ConnectionMultiplexer redis;
         private readonly string inputQueueName;
-
+        private readonly  MessagePackSerializer<RedisTransportMessage> serializer;
         /// <summary>
         /// Initializes a new instance of the <see cref="RedisMessageQueue" /> class.
         /// </summary>
@@ -45,7 +46,7 @@
                 throw new Exception(tw.ToString());
 
             }
-
+            this.serializer = MessagePackSerializer.Get<RedisTransportMessage>();
             this.inputQueueName = inputQueueName;
         }
 
@@ -89,7 +90,7 @@
                 return null;
             }
 
-            var message = RedisTransportMessage.Deserialize(serializedMessage.ToString());
+            var message = this.serializer.UnpackSingleObject(serializedMessage);
 
             return new ReceivedTransportMessage()
             {
@@ -110,7 +111,8 @@
 
         private void InternalSend(IDatabase db, string destinationQueueName, RedisTransportMessage message, TimeSpan? expiry, ITransactionContext context)
         {
-            var serializedMessage = message.Serialize();
+            var serializedMessage = this.serializer.PackSingleObject(message);
+
             RedisKey queueKey = string.Format(QueueKeyFormat, destinationQueueName);
 
             if (context.IsTransactional)
@@ -121,10 +123,10 @@
             }
             else
             {
-                var commitTx = db.CreateTransaction();
-                commitTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
-                commitTx.ListLeftPushAsync(queueKey, message.Id);
-                commitTx.ExecuteAsync();
+                var batch = db.CreateBatch();
+                batch.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
+                batch.ListLeftPushAsync(queueKey, message.Id);
+                batch.Execute();
             }
         }
 

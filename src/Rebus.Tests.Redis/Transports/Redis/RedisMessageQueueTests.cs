@@ -188,7 +188,7 @@ namespace Rebus.Tests.Transports.Redis
 		}
 
         [Test]
-        public void SendReceiveThroughput()
+        public void SendNoTransactionThroughput()
         {
             // Arrange
             string queueName = "Throughput";
@@ -197,17 +197,50 @@ namespace Rebus.Tests.Transports.Redis
             long sentMessages = 0;
 
             // Act
-            sw.Start();
-     
             var transactionContext = new NoTransaction();
             var message = CreateStringMessage("simple message");
 
-            for (int i = 0; i < 1000; i++)
-            {
-                queue.Send(queueName, message, transactionContext);
-                Interlocked.Increment(ref sentMessages);
-            }   
-                   
+            sw.Start();
+            Parallel.For(0, 50, (j) =>
+                {
+                    for (int i = 0; i < 200; i++)
+                    {
+                        queue.Send(queueName, message, transactionContext);
+                        Interlocked.Increment(ref sentMessages);
+                    }
+                });
+            sw.Stop();
+
+            Assert.Pass(string.Format("Throughput of {0} messages / sec", sentMessages / sw.Elapsed.TotalSeconds));
+        }
+
+        [Test]
+        public void SendWithTransactionThroughput()
+        {
+            // Arrange
+            string queueName = "Throughput";
+            var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
+            Stopwatch sw = new Stopwatch();
+            long sentMessages = 0;
+           
+            // Act
+            var message = CreateStringMessage("simple message");
+
+            sw.Start();
+            Parallel.For(0, 50, (j) =>
+                {
+                    var transactionScope = new TransactionScope();
+                    var transactionContext = 
+                        new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
+
+                    for (int i = 0; i < 200; i++)
+                    {
+                        queue.Send(queueName, message, transactionContext);
+                        Interlocked.Increment(ref sentMessages);
+                    }
+
+                    transactionScope.Complete();
+                });
             sw.Stop();
 
             Assert.Pass(string.Format("Throughput of {0} messages / sec", sentMessages / sw.Elapsed.TotalSeconds));
