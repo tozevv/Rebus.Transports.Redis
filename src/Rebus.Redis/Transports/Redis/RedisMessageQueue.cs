@@ -1,267 +1,267 @@
 ﻿namespace Rebus.Transports.Redis
 {
-    using System;
-    using System.Linq;
-    using Rebus.Shared;
-    using System.IO;
-    using StackExchange.Redis;
-    using MsgPack.Serialization;
+	using System;
+	using System.Collections.Generic;
+	using System.IO;
+	using System.Linq;
+	using System.Threading.Tasks;
+	using MsgPack.Serialization;
+	using Rebus.Shared;
+	using StackExchange.Redis;
 
-    /// <summary>
-    /// Implementation of a DuplexTransport using Redis List with push / pop operations.
-    /// Durability requires AOF enabled in Redis.
-    /// 
-    /// 
-    /// if context is transactional the algorithm works like this:
-    /// - message ids are read and copied to a rollback queue associated with the transaction in an atomic operation
-    /// - commit: messages with a specific key id are removed
-    /// - rollback: messages are atomically copied from rollback queue back to the queue in an atomic operation
-    /// - failure to commit / abort: purge rollback log moves messages from rollback queue back to the queue in an atomic operation
-    ///   a failure is detected via a transaction timeout.
-    /// </summary>
-    public class RedisMessageQueue : IDuplexTransport, IDisposable
-    {
-        private const string MessageCounterKeyFormat = "rebus:message:counter";
-        private const string QueueKeyFormat = "rebus:queue:{0}";
-        private const string RollbackQueueKeyFormat = "rebus:queue:{0}:rollback:{1}";
-        private const string RedisContextKey = "redis_context";
+	/// <summary>
+	/// Implementation of a DuplexTransport using Redis List with push / pop operations.
+	/// Durability requires AOF enabled in Redis.
+	/// 
+	/// 
+	/// if context is transactional the algorithm works like this:
+	/// - message ids are read and copied to a rollback queue associated with the transaction in an atomic operation
+	/// - commit: messages with a specific key id are removed
+	/// - rollback: messages are atomically copied from rollback queue back to the queue in an atomic operation
+	/// - failure to commit / abort: purge rollback log moves messages from rollback queue back to the queue in an atomic operation
+	///   a failure is detected via a transaction timeout.
+	/// </summary>
+	public class RedisMessageQueue : IDuplexTransport, IDisposable
+	{
+		private const string MessageCounterKeyFormat = "rebus:message:counter";
+		private const string QueueKeyFormat = "rebus:queue:{0}";
+		private const string RollbackQueueKeyFormat = "rebus:queue:{0}:rollback:{1}";
+		private const string RedisContextKey = "redis_context";
 
-        private readonly ConnectionMultiplexer redis;
-        private readonly string inputQueueName;
-        private readonly  MessagePackSerializer<RedisTransportMessage> serializer;
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RedisMessageQueue" /> class.
-        /// </summary>
-        /// <param name="configOptions">Redis connection configuration options.</param>
-        /// <param name="inputQueueName">Name of the input queue.</param>
-        public RedisMessageQueue(ConfigurationOptions configOptions, string inputQueueName)
-        {
-            var tw = new StringWriter();
-            try
-            {
-                this.redis = ConnectionMultiplexer.Connect(configOptions, tw);
-            }
-            catch
-            {
-                throw new Exception(tw.ToString());
+		private readonly ConnectionMultiplexer redis;
+		private readonly string inputQueueName;
+		private readonly MessagePackSerializer<RedisTransportMessage> serializer;
 
-            }
-            this.serializer = MessagePackSerializer.Get<RedisTransportMessage>();
-            this.inputQueueName = inputQueueName;
-        }
+		/// <summary>
+		/// Initializes a new instance of the <see cref="RedisMessageQueue" /> class.
+		/// </summary>
+		/// <param name="configOptions">Redis connection configuration options.</param>
+		/// <param name="inputQueueName">Name of the input queue.</param>
+		public RedisMessageQueue(ConfigurationOptions configOptions, string inputQueueName)
+		{
+			var tw = new StringWriter();
+			try
+			{
+				this.redis = ConnectionMultiplexer.Connect(configOptions, tw);
+			}
+			catch
+			{
+				throw new Exception(tw.ToString());
 
-        public string InputQueue
-        {
-            get { return this.inputQueueName; }
-        }
+			}
+			this.serializer = MessagePackSerializer.Get<RedisTransportMessage>();
+			this.inputQueueName = inputQueueName;
+		}
 
-        public string InputQueueAddress
-        {
-            get { return this.inputQueueName; }
-        }
+		public string InputQueue
+		{
+			get { return this.inputQueueName; }
+		}
 
-        public void Send(string destinationQueueName, TransportMessageToSend message, ITransactionContext context)
-        {
-            IDatabase db = this.redis.GetDatabase();
+		public string InputQueueAddress
+		{
+			get { return this.inputQueueName; }
+		}
+
+		public void Send(string destinationQueueName, TransportMessageToSend message, ITransactionContext context)
+		{
+			IDatabase db = this.redis.GetDatabase();
       
-            var id = db.StringIncrement(MessageCounterKeyFormat);
+			var id = db.StringIncrement(MessageCounterKeyFormat);
 
-            var redisMessage = new RedisTransportMessage()
-            {
-                Id = id.ToString(),
-                Body = message.Body,
-                Headers = message.Headers,
-                Label = message.Label
-            };
+			var redisMessage = new RedisTransportMessage()
+			{
+				Id = id.ToString(),
+				Body = message.Body,
+				Headers = message.Headers,
+				Label = message.Label
+			};
 
-            var expiry = GetMessageExpiration(message);
+			var expiry = GetMessageExpiration(message);
 
-            InternalSend(db, destinationQueueName, redisMessage, expiry, context); 
-        }
+			InternalSend(db, destinationQueueName, redisMessage, expiry, context);
+		}
 
-        public ReceivedTransportMessage ReceiveMessage(ITransactionContext context)
-        {
-            IDatabase db = this.redis.GetDatabase();
+		public ReceivedTransportMessage ReceiveMessage(ITransactionContext context)
+		{
+			IDatabase db = this.redis.GetDatabase();
 
-            var serializedMessage = InternalReceive(db, context);
+			var serializedMessage = InternalReceive(db, context);
 
-            if (serializedMessage.IsNull)
-            {
-                return null;
-            }
+			if (serializedMessage.IsNull)
+			{
+				return null;
+			}
 
-            var message = this.serializer.UnpackSingleObject(serializedMessage);
+			var message = this.serializer.UnpackSingleObject(serializedMessage);
 
-            return new ReceivedTransportMessage()
-            {
-                Id = message.Id,
-                Body = message.Body,
-                Headers = message.Headers,
-                Label = message.Label
-            };
-        }
+			return new ReceivedTransportMessage()
+			{
+				Id = message.Id,
+				Body = message.Body,
+				Headers = message.Headers,
+				Label = message.Label
+			};
+		}
 
-        public void Dispose()
-        {
-            if (this.redis != null)
-            {
-                this.redis.Dispose();
-            }
-        }
+		public void Dispose()
+		{
+			if (this.redis != null)
+			{
+				this.redis.Dispose();
+			}
+		}
 
-        private void InternalSend(IDatabase db, string destinationQueueName, RedisTransportMessage message, TimeSpan? expiry, ITransactionContext context)
-        {
-            var serializedMessage = this.serializer.PackSingleObject(message);
+		private void InternalSend(IDatabase db, string destinationQueueName, RedisTransportMessage message, TimeSpan? expiry, ITransactionContext context)
+		{
+			var serializedMessage = this.serializer.PackSingleObject(message);
 
-            RedisKey queueKey = string.Format(QueueKeyFormat, destinationQueueName);
+			RedisKey queueKey = string.Format(QueueKeyFormat, destinationQueueName);
 
-            if (context.IsTransactional)
-            {
-                var commitTx = GetRedisTransaction(db, context).CommitTx;
-                commitTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
-                commitTx.ListLeftPushAsync(queueKey, message.Id);
-            }
-            else
-            {
-                var batch = db.CreateBatch();
-                batch.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
-                batch.ListLeftPushAsync(queueKey, message.Id);
-                batch.Execute();
-            }
-        }
+			if (context.IsTransactional)
+			{
+				var commitTx = GetRedisTransaction(db, context).CommitTx;
+				commitTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
+				commitTx.ListLeftPushAsync(queueKey, message.Id);
+			}
+			else
+			{
+				var batch = db.CreateBatch();
+				batch.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
+				batch.ListLeftPushAsync(queueKey, message.Id);
+				batch.Execute();
+			}
+		}
 
-        private RedisValue InternalReceive(IDatabase db, ITransactionContext context)
-        {
-            RedisValue incomingMessageId;
+		public RedisValue InternalReceive(IDatabase db, ITransactionContext context)
+		{
+			RedisValue incomingMessageId;
+			RedisKey queueKey = string.Format(QueueKeyFormat, this.inputQueueName);
 
-            PurgeRollbackLog();
+			if (context.IsTransactional)
+			{
+				// purge rollback log from previous calls
+				PurgeRollbackLog();
 
-            RedisKey queueKey = string.Format(QueueKeyFormat, this.inputQueueName);
-
-            if (context.IsTransactional)
-            {
-                // purge rollback log from previous calls
-                PurgeRollbackLog();
-
-                var redisTransaction = GetRedisTransaction(db, context);
+				var redisTransaction = GetRedisTransaction(db, context);
    
-                // atomically copy message id from queue to specific transaction rollback queue
-                RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, redisTransaction.TransactionId);    
-                incomingMessageId = db.ListRightPopLeftPush(queueKey, rollbackQueueKey, CommandFlags.PreferMaster);
+				// atomically copy message id from queue to specific transaction rollback queue
+				RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, redisTransaction.TransactionId);    
+				incomingMessageId = db.ListRightPopLeftPush(queueKey, rollbackQueueKey, CommandFlags.PreferMaster);
 
-                if (incomingMessageId.IsNull)
-                {
-                    return RedisValue.Null;
-                }
+				if (incomingMessageId.IsNull)
+				{
+					return RedisValue.Null;
+				}
 
-                // ok, a message was read and the transaction commited
-                // schedule the key for deletion in the single transaction commit
-                context.BeforeCommit += () =>
-                {
-                    // add read messages to delete on commit
-                    redisTransaction.CommitTx.KeyDeleteAsync(incomingMessageId.ToString());
-                    redisTransaction.CommitTx.ListRightPopAsync(rollbackQueueKey);
-                };
+				// ok, a message was read and the transaction commited
+				// schedule the key for deletion in the single transaction commit
+				context.BeforeCommit += () =>
+				{
+					// add read messages to delete on commit
+					redisTransaction.CommitTx.KeyDeleteAsync(incomingMessageId.ToString());
+					redisTransaction.CommitTx.ListRightPopAsync(rollbackQueueKey);
+				};
                         
-                context.DoRollback += () =>
-                {
-                    // atomically rollback, moving the message id back to the queue
-                    redisTransaction.RollbackTx.ListRightPopLeftPushAsync(rollbackQueueKey, queueKey, CommandFlags.PreferMaster);
-                };
+				context.DoRollback += () =>
+				{
+					// atomically rollback, moving the message id back to the queue
+					redisTransaction.RollbackTx.ListRightPopLeftPushAsync(rollbackQueueKey, queueKey, CommandFlags.PreferMaster);
+				};
 
-                var message = db.StringGet(incomingMessageId.ToString());
+				var message = db.StringGet(incomingMessageId.ToString());
 
-                return message;
-            }
-            else
-            {
-                // no transaction here, just retrieve the key id from que Redis list
-                incomingMessageId = db.ListRightPop(queueKey, CommandFlags.PreferMaster);
+				return message;
+			}
+			else
+			{
+				// no transaction here, just retrieve the key id from que Redis list
+				incomingMessageId = db.ListRightPop(queueKey, CommandFlags.None);
 
-                if (incomingMessageId.IsNull)
-                {
-                    // empty queue
-                    return RedisValue.Null;
-                }
-                var message = db.StringGet(incomingMessageId.ToString());
+				if (incomingMessageId.IsNull)
+				{
+					// empty queue
+					return RedisValue.Null;
+				}
+				string messageKey = incomingMessageId.ToString();
+				var message = db.StringGet(messageKey);
+				#pragma warning disable 4014
+				db.KeyDeleteAsync(messageKey);
+				#pragma warning restore 4014
+				return message;
+		
+			}
+		}
 
-                db.KeyDelete(incomingMessageId.ToString());
+		private async Task PurgeRollbackLog()
+		{
+			IDatabase db = this.redis.GetDatabase();
+			IServer server = this.redis.GetServer(this.redis.GetEndPoints().First());
 
-                return message;
-            }
-        }
+			// search all existing rollback queues 
+			// and move 
+			var rollbackQueues = server.Keys(0, string.Format(RollbackQueueKeyFormat, "*", "*"));
 
-        private void PurgeRollbackLog()
-        {
-            // TODO: need to do this only "sometimes"; add some kind of waiver on elapsed time;
+			foreach (var rollbackQueueKey in rollbackQueues)
+			{
+				string rollbackQueueString = rollbackQueueKey;
 
-            IDatabase db = this.redis.GetDatabase();
-            IServer server = this.redis.GetServer(this.redis.GetEndPoints().First());
-
-            // search all existing rollback queues 
-            // and move 
-            var rollbackQueues = server.Keys(0, string.Format(RollbackQueueKeyFormat, "*", "*"));
-
-            foreach (var rollbackQueueKey in rollbackQueues)
-            {
-                string rollbackQueueString = rollbackQueueKey;
-
-                string inputQueueName = rollbackQueueString.ParseFormat(RollbackQueueKeyFormat, 0);
-                long transactionId = long.Parse(rollbackQueueString.ParseFormat(RollbackQueueKeyFormat, 1));
+				string inputQueueName = rollbackQueueString.ParseFormat(RollbackQueueKeyFormat, 0);
+				long transactionId = long.Parse(rollbackQueueString.ParseFormat(RollbackQueueKeyFormat, 1));
          
-                if (!RedisTransaction.IsTransactionActive(db, transactionId))
-                {
-                    RedisKey queueKey = string.Format(QueueKeyFormat, inputQueueName);
+				if (!RedisTransaction.IsTransactionActive(db, transactionId))
+				{
+					RedisKey queueKey = string.Format(QueueKeyFormat, inputQueueName);
 
-                    // rollback all messages on the rollback queue.
-                    while (db.ListRightPopLeftPush(rollbackQueueKey, queueKey, CommandFlags.PreferMaster) != RedisValue.Null)
-                    {
-                    }
-                }
-            }
-        }
+					// rollback all messages on the rollback queue.
+					while (await db.ListRightPopLeftPushAsync(rollbackQueueKey, queueKey, CommandFlags.PreferMaster) != RedisValue.Null)
+					{
+					}
+				}
+			}
+		}
 
-        private static TimeSpan? GetMessageExpiration(TransportMessageToSend message)
-        {
-            object timeoutString = string.Empty;
-            if (message.Headers.TryGetValue(Headers.TimeToBeReceived, out timeoutString) &&
-                (timeoutString is string))
-            {
-                return TimeSpan.Parse(timeoutString as string);
-            }
-            else
-            {
-                return null;
-            }
-        }
+		private static TimeSpan? GetMessageExpiration(TransportMessageToSend message)
+		{
+			object timeoutString = string.Empty;
+			if (message.Headers.TryGetValue(Headers.TimeToBeReceived, out timeoutString) &&
+			    (timeoutString is string))
+			{
+				return TimeSpan.Parse(timeoutString as string);
+			}
+			else
+			{
+				return null;
+			}
+		}
 
-        private static RedisTransaction GetRedisTransaction(IDatabase db, ITransactionContext context)
-        {
-            if (!context.IsTransactional)
-            {
-                throw new ArgumentException("Context is not transactional");
-            }
+		private static RedisTransaction GetRedisTransaction(IDatabase db, ITransactionContext context)
+		{
+			if (!context.IsTransactional)
+			{
+				throw new ArgumentException("Context is not transactional");
+			}
 
-            // locking not needed here 
-            // assuming 1-to-1 relathionship between current worker and context
-            var redisTransaction = context[RedisContextKey] as RedisTransaction;
-            if (redisTransaction == null)
-            {
-                redisTransaction = new RedisTransaction(db, TimeSpan.FromMinutes(1));
+			// locking not needed here 
+			// assuming 1-to-1 relathionship between current worker and context
+			var redisTransaction = context[RedisContextKey] as RedisTransaction;
+			if (redisTransaction == null)
+			{
+				redisTransaction = new RedisTransaction(db, TimeSpan.FromMinutes(1));
 
-                context[RedisContextKey] = redisTransaction;
+				context[RedisContextKey] = redisTransaction;
 
-                context.DoCommit += () =>
-                {
-                    redisTransaction.Commit();
-                };
+				context.DoCommit += () =>
+				{
+					redisTransaction.Commit();
+				};
 
-                context.DoRollback += () =>
-                {
-                    redisTransaction.Rollback();
-                };
-            }
-            return redisTransaction;
-        }
-    }
+				context.DoRollback += () =>
+				{
+					redisTransaction.Rollback();
+				};
+			}
+			return redisTransaction;
+		}
+	}
 }

@@ -5,7 +5,7 @@
 
     public static class StringExtensions
     {
-        public static string ParseFormat(this string input, string format, int position) 
+        public static string ParseFormat(this string input, string format, int position)
         {
             object[] groupings = format.Where(f => f == '{').Select(f => (object)"(.+)").ToArray();
        

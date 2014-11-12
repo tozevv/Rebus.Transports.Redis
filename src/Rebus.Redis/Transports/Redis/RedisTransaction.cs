@@ -1,18 +1,18 @@
-﻿using System;
-using System.Linq;
-using StackExchange.Redis;
-
-namespace Rebus.Transports.Redis
+﻿namespace Rebus.Transports.Redis
 {
+    using System;
+    using System.Linq;
+    using StackExchange.Redis;
+
     internal class RedisTransaction
-	{
-		private readonly IDatabase db;
-		private readonly long transactionId;
+    {
+        private readonly IDatabase db;
+        private readonly long transactionId;
         private readonly Lazy<ITransaction> commitTx;
         private readonly Lazy<ITransaction> rollbackTx;
 
-		private const string TransactionCounterKey = "rebus:transaction:counter";
-		private const string TransactionLockKey = "rebus:transaction:{0}";
+        private const string TransactionCounterKey = "rebus:transaction:counter";
+        private const string TransactionLockKey = "rebus:transaction:{0}";
 
         public RedisTransaction(IDatabase db, TimeSpan timeout)
         {
@@ -24,21 +24,21 @@ namespace Rebus.Transports.Redis
             rollbackTx = new Lazy<ITransaction>(() => this.db.CreateTransaction());
         }
 
-		public long TransactionId
-		{ 
-			get
-			{
-				return transactionId;
-			} 
-		}
+        public long TransactionId
+        { 
+            get
+            {
+                return transactionId;
+            } 
+        }
 
         public ITransaction CommitTx
-		{
-			get
-			{ 
+        {
+            get
+            { 
                 return commitTx.Value;
-			}
-		}
+            }
+        }
 
         public ITransaction RollbackTx
         {
@@ -48,22 +48,22 @@ namespace Rebus.Transports.Redis
             }
         }
 
-		public void Commit()
-		{
+        public void Commit()
+        {
             this.CommitTx.KeyDeleteAsync(string.Format(TransactionLockKey, transactionId));
             this.CommitTx.Execute();
-		}
+        }
 
-		public void Rollback()
-		{
+        public void Rollback()
+        {
             this.RollbackTx.KeyDeleteAsync(string.Format(TransactionLockKey, transactionId));
             this.RollbackTx.Execute();
-		}
+        }
 
         public static bool IsTransactionActive(IDatabase database, long transactionId)
         {
             return database.KeyExists(string.Format(TransactionLockKey, transactionId));
-        }		
-	}
+        }
+    }
 }
 
