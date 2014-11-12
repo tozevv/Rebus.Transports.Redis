@@ -141,8 +141,9 @@
 			if (context.IsTransactional)
 			{
 				// purge rollback log from previous calls
+                #pragma warning disable 4014
 				PurgeRollbackLog();
-
+                #pragma warning restore 4014
 				var redisTransaction = GetRedisTransaction(db, context);
    
 				// atomically copy message id from queue to specific transaction rollback queue

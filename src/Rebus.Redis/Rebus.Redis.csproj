@@ -39,15 +39,15 @@
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
-    <Reference Include="Rebus">
-      <HintPath>..\packages\Rebus.0.71.0\lib\NET40\Rebus.dll</HintPath>
-    </Reference>
-    <Reference Include="StackExchange.Redis">
-      <HintPath Condition="'$(OS)' != 'Unix'">..\packages\StackExchange.Redis.1.0.333\lib\net45\StackExchange.Redis.dll</HintPath>
-      <HintPath Condition="'$(OS)' == 'Unix'">..\packages\StackExchange.Redis.1.0.333\lib\mono\StackExchange.Redis.dll</HintPath>
-    </Reference>
     <Reference Include="MsgPack">
       <HintPath>..\packages\MsgPack.Cli.0.5.5\lib\net45\MsgPack.dll</HintPath>
+    </Reference>
+    <Reference Include="Rebus">
+      <HintPath>..\packages\Rebus.0.73.0\lib\NET40\Rebus.dll</HintPath>
+    </Reference>
+    <Reference Include="StackExchange.Redis">
+      <HintPath Condition="'$(OS)' != 'Unix'">..\packages\StackExchange.Redis.1.0.371\lib\net45\StackExchange.Redis.dll</HintPath>
+      <HintPath Condition="'$(OS)' == 'Unix'">..\packages\StackExchange.Redis.1.0.371\lib\net45\mono\StackExchange.Redis.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
