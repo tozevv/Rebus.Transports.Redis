@@ -4,6 +4,8 @@
     using Rebus.Bus;
     using Rebus.Transports.Redis;
     using StackExchange.Redis;
+    using System;
+    using System.Collections.Generic;
     using System.Configuration;
     using System.Diagnostics;
     using System.Text;
@@ -18,7 +20,6 @@
 	public class RedisMessageQueueTests
     {
         private ConfigurationOptions redisConfiguration = null;
-        private MessagePacker<string> packer = new MessagePacker<string>();
 
 		[TestFixtureSetUp]
 		public void Init()
@@ -39,229 +40,126 @@
 		public void WhenSendingMessage_ThenMessageIsDelivered()
 		{
 			// Arrange
-			string queueName = "WhenSendingMessage_ThenMessageIsDelivered";
-			string sentMessage = "message";
-			var transactionContext = new NoTransaction();
-			var queue = new RedisMessageQueue(redisConfiguration, queueName);
+			string message = "aMessage"; 
+            var queue = new SimpleQueue<string>(new RedisMessageQueue(redisConfiguration, "WhenSendingMessage_ThenMessageIsDelivered"));
 
 			// Act
-			queue.Send(queueName, packer.Pack(sentMessage), transactionContext);
-			var receivedMessage = packer.Unpack(queue.ReceiveMessage(transactionContext));
+            queue.Send(message);
+            string receivedMessage = queue.Receive();
 
 			// Assert
-			Assert.AreEqual(sentMessage, receivedMessage);
+            Assert.AreEqual(message, receivedMessage);
 		}
 
-		[Test]
-		public void WhenTransactionCommitted_MessageIsSent()
-		{
-			// Arrange
-			string queueName = "WhenTransactionCommitted_MessageIsSent";
-			string sentMessage = "message";
-			var queue = new RedisMessageQueue(redisConfiguration, queueName);
-			string receivedBeforeCommit = null;
-			string receivedAfterCommit = null;
+        [Test]
+        public void WhenSendingMessages_ThenOrderIsKept()
+        {
+            // Arrange
+            var queue = new SimpleQueue<string>(new RedisMessageQueue(redisConfiguration, "WhenSendingMessages_ThenOrderIsKept"));
+            IEnumerable<string> messages = new List<string> { "msg1", "msg2", "msg3" };
+           
+            // Act
+            queue.SendAll(messages);
+            var receivedMessages = queue.ReceiveAll();
 
-			// Act
-			using (var transactionScope = new TransactionScope())
-			{
-				var transactionContext = 
-					new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
+            // Assert
+            Assert.AreEqual(messages, receivedMessages);
+        }
 
-				queue.Send(queueName, packer.Pack(sentMessage), transactionContext);
-				receivedBeforeCommit = packer.Unpack(queue.ReceiveMessage(transactionContext));
-				transactionScope.Complete();
-				transactionScope.Dispose();
-			}
+        [Test]
+        public void WhenSendingMessagesInTransaction_ThenMessageIsDeliveredWithCommit()
+        {
+            // Arrange
+            var queue = new SimpleQueue<string>(new RedisMessageQueue(redisConfiguration, "WhenSendingMessagesInTransaction_ThenMessageIsDeliveredWithCommit"));
+            string message = "aMessage";
+            string receivedBeforeCommit = null;
+            string receivedAfterCommit = null;
 
-			using (var transactionScope = new TransactionScope())
-			{
-				var transactionContext = 
-					new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
+            // Act
+            using (var transactionScope = new TransactionScope())
+            {
+                queue.Send(message);
+                receivedBeforeCommit = queue.Receive();
+                transactionScope.Complete();
+            }
 
-				receivedAfterCommit = packer.Unpack(queue.ReceiveMessage(transactionContext));
-				transactionScope.Complete();
-			}
+            receivedAfterCommit = queue.Receive();
 
-			// Assert
-			Assert.IsNull(receivedBeforeCommit);
-			Assert.AreEqual(sentMessage, receivedAfterCommit);
-		}
+            // Assert
+            Assert.IsNull(receivedBeforeCommit, "Message was not sent prior to commit.");
+            Assert.AreEqual(message, receivedAfterCommit);
+        }
 
-		[Test]
-		public void WhenTransactionRolledBack_ReceivedMessageIsKept()
-		{
-			// Arrange
-			string queueName = "WhenTransactionRolledBack_ReceivedMessageIsKept";
-			string sentMessage = "message";
-			var queue = new RedisMessageQueue(redisConfiguration, queueName);
-			string receivedMessageBeforeRollback = null;
-			string receivedMessageAfterRollback = null;
+        [Test]
+        public void WhenRollingbackSend_ThenMessageIsNotSent()
+        {
+            // Arrange
+            var queue = new SimpleQueue<string>(new RedisMessageQueue(redisConfiguration, "WhenRollingbackSend_ThenMessageIsNotSent"));
+            string message = "aMessage";
 
-			// Act
-			using (var transactionScope = new TransactionScope())
-			{
-				var transactionContext = 
-					new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
-                
-				queue.Send(queueName, packer.Pack(sentMessage), 
-					new NoTransaction()); // simulate other transaction sent the message before
-				receivedMessageBeforeRollback = packer.Unpack(queue.ReceiveMessage(transactionContext));
+            // Act
+            using (var transactionScope = new TransactionScope())
+            {
+                queue.Send(message);
+                transactionScope.Dispose();
+            }
 
-				// rollback
-			}
-			using (var transactionScope = new TransactionScope())
-			{
-				var transactionContext = 
-					new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
+            string receivedAfterRollback = queue.Receive();
 
-				receivedMessageAfterRollback = packer.Unpack(queue.ReceiveMessage(transactionContext));
-				transactionScope.Complete();
-			}
+            // Assert
+            Assert.IsNull(receivedAfterRollback);
+        }
+        
+        [Test]
+        public void WhenRollingbackReceive_ThenMessageIsKept()
+        {
+             // Arrange
+            string message = "aMessage";
+            var queue = new SimpleQueue<string>(new RedisMessageQueue(redisConfiguration, "WhenRollingbackReceive_ThenMessageIsKept"));
+            string receivedBeforeRollback = null;
+            string receivedAfterRollback = null;
 
-			// Assert
-			Assert.AreEqual(sentMessage, receivedMessageBeforeRollback, "Receive message failed");
-			Assert.AreEqual(sentMessage, receivedMessageAfterRollback, "Receive message rollback failed");
-		}
+            // Act
+            queue.Send(message);
 
-		[Test]
-		public void WhenTransactionRolledBack_ReceivedMessageOrderIsKept()
-		{
-			// Arrange
-			string queueName = "WhenTransactionRolledBack_ReceivedMessageOrderIsKept";
-			string[] sentMessages = new string[] { "message1", "message2", "message3" };
-			string[] receivedMessagesBeforeRollback = new string[sentMessages.Length];
-			string[] receivedMessagesAfterRollback = new string[sentMessages.Length];
+            using (var transactionScope = new TransactionScope())
+            {
+                receivedBeforeRollback = queue.Receive();
+                transactionScope.Dispose();
+            }
 
-			var transactionScope = new TransactionScope();
-			var transactionContext = 
-				new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
-			var queue = new RedisMessageQueue(redisConfiguration, queueName);
+            receivedAfterRollback = queue.Receive();
 
-			// Act
-			foreach (var sentMessage in sentMessages)
-			{
-				queue.Send(queueName, packer.Pack(sentMessage), 
-					new NoTransaction()); // simulate other transaction sent the message before
-			}
+            // Assert
+            Assert.AreEqual(message, receivedBeforeRollback);
+            Assert.AreEqual(message, receivedAfterRollback);
+        }
 
-			for (int i = 0; i < sentMessages.Length; i++)
-			{
-				receivedMessagesBeforeRollback[i] = packer.Unpack(queue.ReceiveMessage(transactionContext));
-			}
+        [Test]
+        public void WhenRollingbackReceive_ThenMessageOrderIsKept()
+        {
+            // Arrange
+            var queue = new SimpleQueue<string>(new RedisMessageQueue(redisConfiguration, "WhenRollingbackReceive_ThenMessageOrderIsKept"));
+            List<string> messages = new List<string> { "msg1", "msg2", "msg3" };
+            IEnumerable<string> receivedBeforeRollback = null;
+            IEnumerable<string> receivedAfterRollback = null;
+         
+            // Act
+            queue.SendAll(messages);
 
-			transactionScope.Dispose(); // rollback
-			transactionScope = new TransactionScope();
+            using (var transactionScope = new TransactionScope())
+            {
+                receivedBeforeRollback = queue.ReceiveAll();
+                transactionScope.Dispose();
+            }
 
-			for (int i = 0; i < sentMessages.Length; i++)
-			{
-                receivedMessagesAfterRollback[i] = packer.Unpack(queue.ReceiveMessage(transactionContext));
-			}
+            receivedAfterRollback = queue.ReceiveAll();
 
-			transactionScope.Complete();
-			transactionScope.Dispose();
-
-			// Assert
-			CollectionAssert.AreEqual(sentMessages, receivedMessagesBeforeRollback, "Receive message failed");
-			CollectionAssert.AreEqual(sentMessages, receivedMessagesAfterRollback, "Receive message rollback order failed");
-		}
-
-		[Test]
-		public void WhenTransactionTimesOut_ReceivedMessageIsKept()
-		{
-			// Arrange
-			string queueName = "WhenTransactionTimesOut_ReceivedMessageIsKept";
-			string sentMessage = "message";
-			var transactionScope = new TransactionScope();
-			var transactionContext = 
-				new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
-			var queue = new RedisMessageQueue(redisConfiguration, queueName);
-
-			// Act
-			queue.Send(queueName, packer.Pack(sentMessage), 
-				new NoTransaction()); // simulate other transaction sent the message before
-			var receivedMessageBeforeRollback = packer.Unpack(queue.ReceiveMessage(transactionContext));
-			transactionScope.Dispose();
-            var receivedMessageAfterRollback = packer.Unpack(queue.ReceiveMessage(transactionContext));
-
-			// Assert
-			Assert.AreEqual(sentMessage, receivedMessageBeforeRollback, "Receive message failed");
-			Assert.AreEqual(sentMessage, receivedMessageAfterRollback, "Receive message rollback failed");
-		}
-
-		[Test]
-		public void SendAndReceiveNoTransactionThroughput()
-		{
-			// Arrange
-			string queueName = "Throughput";
-			var queue = new RedisMessageQueue(redisConfiguration, queueName);
-			Stopwatch swSend = new Stopwatch();
-			Stopwatch swReceive = new Stopwatch();
-			long sentMessages = 0;
-			long receivedMessages = 0;
-			var transactionContext = new NoTransaction();
-			var message = packer.Pack("simple message");
-
-			// Act
-			swSend.Start();
-			Parallel.For(0, 5, new ParallelOptions { MaxDegreeOfParallelism = 50 }, (j) =>
-				{
-					for (int i = 0; i < 10; i++)
-					{
-						queue.Send(queueName, message, transactionContext);
-						Interlocked.Increment(ref sentMessages);
-					}
-				});
-
-			swSend.Stop();
-
-			swReceive.Start();
-			Parallel.For(0, 5, new ParallelOptions { MaxDegreeOfParallelism = 50 }, (j) =>
-				{
-					for (int i = 0; i < 10; i++)
-					{
-						var msg = queue.ReceiveMessage(transactionContext);
-						Assert.AreEqual("simple message", packer.Unpack(msg));
-						Interlocked.Increment(ref receivedMessages);
-					}
-				});
-			swReceive.Stop();
-
-			Assert.AreEqual(sentMessages, receivedMessages, "Expect to receive the same number of messages"); 
-			Assert.Pass(string.Format("Send Throughput of {0} messages / sec\nReceive Throughput of {1} messages / sec", 
-					sentMessages / swSend.Elapsed.TotalSeconds,
-					receivedMessages / swReceive.Elapsed.TotalSeconds));
-		}
-
-		[Test]
-		public void SendWithTransactionThroughput()
-		{
-			// Arrange
-			string queueName = "Throughput";
-			var queue = new RedisMessageQueue(redisConfiguration, queueName);
-			Stopwatch sw = new Stopwatch();
-			long sentMessages = 0;
-			var message = packer.Pack("simple message");
-
-			// Act
-			sw.Start();
-			Parallel.For(0, 5, (j) =>
-				{
-					var transactionScope = new TransactionScope();
-					var transactionContext = 
-						new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
-
-					for (int i = 0; i < 20; i++)
-					{
-						queue.Send(queueName, message, transactionContext);
-						Interlocked.Increment(ref sentMessages);
-					}
-
-					transactionScope.Complete();
-				});
-			sw.Stop();
-
-			Assert.Pass(string.Format("Throughput of {0} messages / sec", sentMessages / sw.Elapsed.TotalSeconds));
-		}
+            // Assert
+            Assert.AreEqual(messages, receivedBeforeRollback);
+            Assert.AreEqual(messages, receivedAfterRollback);
+        }
+	
+        // TODO: add timeout test
 	}
 }
