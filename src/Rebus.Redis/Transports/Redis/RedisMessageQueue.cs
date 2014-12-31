@@ -30,13 +30,13 @@
 
 		private readonly ConnectionMultiplexer redis;
 		private readonly string inputQueueName;
-		private readonly MessagePackSerializer<RedisTransportMessage> serializer;
+        private readonly MessagePackSerializer<RedisTransportMessage> serializer;
 
 		/// <summary>
 		/// Initializes a new instance of the <see cref="RedisMessageQueue" /> class.
 		/// </summary>
 		/// <param name="configOptions">Redis connection configuration options.</param>
-		/// <param name="inputQueueName">Name of the input queue.</param>
+		/// <param name="inputQueueName">Name of the input queue.</param
 		public RedisMessageQueue(ConfigurationOptions configOptions, string inputQueueName)
 		{
 			var tw = new StringWriter();
@@ -49,7 +49,7 @@
 				throw new Exception(tw.ToString());
 
 			}
-			this.serializer = MessagePackSerializer.Get<RedisTransportMessage>();
+            this.serializer = MessagePackSerializer.Get<RedisTransportMessage>();
 			this.inputQueueName = inputQueueName;
 		}
 
@@ -121,15 +121,19 @@
 			if (context.IsTransactional)
 			{
 				var commitTx = GetRedisTransaction(db, context).CommitTx;
-				commitTx.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
+				commitTx.StringSetAsync(message.Id, serializedMessage, expiry, When.Always);
 				commitTx.ListLeftPushAsync(queueKey, message.Id);
 			}
 			else
 			{
-				var batch = db.CreateBatch();
-				batch.StringSetAsync(message.Id, serializedMessage, expiry, When.NotExists);
-				batch.ListLeftPushAsync(queueKey, message.Id);
-				batch.Execute();
+
+                var commitTx = db.CreateTransaction();
+                commitTx.StringSetAsync(message.Id, serializedMessage, expiry, When.Always);
+                commitTx.ListLeftPushAsync(queueKey, message.Id);
+                commitTx.Execute();
+                /*
+                db.StringSet(message.Id, serializedMessage, expiry, When.Always);
+                db.ListLeftPush(queueKey, message.Id);*/
 			}
 		}
 
@@ -148,7 +152,11 @@
    
 				// atomically copy message id from queue to specific transaction rollback queue
 				RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, redisTransaction.TransactionId);    
+
+
 				incomingMessageId = db.ListRightPopLeftPush(queueKey, rollbackQueueKey, CommandFlags.PreferMaster);
+                db.KeyExpire(rollbackQueueKey, TimeSpan.FromSeconds(30));
+
 
 				if (incomingMessageId.IsNull)
 				{
@@ -157,18 +165,13 @@
 
 				// ok, a message was read and the transaction commited
 				// schedule the key for deletion in the single transaction commit
-				context.BeforeCommit += () =>
-				{
-					// add read messages to delete on commit
-					redisTransaction.CommitTx.KeyDeleteAsync(incomingMessageId.ToString());
-					redisTransaction.CommitTx.ListRightPopAsync(rollbackQueueKey);
-				};
-                        
-				context.DoRollback += () =>
-				{
+				
+				redisTransaction.CommitTx.KeyDeleteAsync(incomingMessageId.ToString());
+				redisTransaction.CommitTx.ListRightPopAsync(rollbackQueueKey);
+				
 					// atomically rollback, moving the message id back to the queue
-					redisTransaction.RollbackTx.ListRightPopLeftPushAsync(rollbackQueueKey, queueKey, CommandFlags.PreferMaster);
-				};
+				redisTransaction.RollbackTx.ListRightPopLeftPushAsync(rollbackQueueKey, queueKey, CommandFlags.PreferMaster);
+			
 
 				var message = db.StringGet(incomingMessageId.ToString());
 

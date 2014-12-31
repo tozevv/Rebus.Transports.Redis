@@ -1,34 +1,38 @@
 ﻿namespace Rebus.Tests.Transports.Redis
 {
-	using System.Diagnostics;
-	using System.Text;
-	using System.Threading;
-	using System.Threading.Tasks;
-	using System.Transactions;
-	using NUnit.Framework;
-	using Rebus.Bus;
-	using Rebus.Transports.Redis;
-	using StackExchange.Redis;
+    using NUnit.Framework;
+    using Rebus.Bus;
+    using Rebus.Transports.Redis;
+    using StackExchange.Redis;
+    using System.Configuration;
+    using System.Diagnostics;
+    using System.Text;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using System.Transactions;
 
 	/// <summary>
 	/// Unit tests for Redis Message Queue.
 	/// </summary>
 	[TestFixture]
 	public class RedisMessageQueueTests
-	{
-		private RedisServer server = null;
+    {
+        private ConfigurationOptions redisConfiguration = null;
+        private MessagePacker<string> packer = new MessagePacker<string>();
 
 		[TestFixtureSetUp]
 		public void Init()
 		{
-			server = new RedisServer(6666);
-			server.Start();
+            string connectionString = ConfigurationManager.ConnectionStrings["RebusUnitTest"].ConnectionString;
+            redisConfiguration = ConfigurationOptions.Parse(connectionString);
 		}
 
 		[TestFixtureTearDown]
 		public void Dispose()
 		{
-			server.Stop();
+            //var redis = ConnectionMultiplexer.Connect(redisConfiguration);
+            //IServer server = redis.GetServer(redis.GetEndPoints()[0]);
+            //server.FlushDatabase();
 		}
 
 		[Test]
@@ -38,11 +42,11 @@
 			string queueName = "WhenSendingMessage_ThenMessageIsDelivered";
 			string sentMessage = "message";
 			var transactionContext = new NoTransaction();
-			var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
+			var queue = new RedisMessageQueue(redisConfiguration, queueName);
 
 			// Act
-			queue.Send(queueName, CreateStringMessage(sentMessage), transactionContext);
-			var receivedMessage = GetStringMessage(queue.ReceiveMessage(transactionContext));
+			queue.Send(queueName, packer.Pack(sentMessage), transactionContext);
+			var receivedMessage = packer.Unpack(queue.ReceiveMessage(transactionContext));
 
 			// Assert
 			Assert.AreEqual(sentMessage, receivedMessage);
@@ -54,7 +58,7 @@
 			// Arrange
 			string queueName = "WhenTransactionCommitted_MessageIsSent";
 			string sentMessage = "message";
-			var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
+			var queue = new RedisMessageQueue(redisConfiguration, queueName);
 			string receivedBeforeCommit = null;
 			string receivedAfterCommit = null;
 
@@ -64,8 +68,8 @@
 				var transactionContext = 
 					new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
 
-				queue.Send(queueName, CreateStringMessage(sentMessage), transactionContext);
-				receivedBeforeCommit = GetStringMessage(queue.ReceiveMessage(transactionContext));
+				queue.Send(queueName, packer.Pack(sentMessage), transactionContext);
+				receivedBeforeCommit = packer.Unpack(queue.ReceiveMessage(transactionContext));
 				transactionScope.Complete();
 				transactionScope.Dispose();
 			}
@@ -75,7 +79,7 @@
 				var transactionContext = 
 					new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
 
-				receivedAfterCommit = GetStringMessage(queue.ReceiveMessage(transactionContext));
+				receivedAfterCommit = packer.Unpack(queue.ReceiveMessage(transactionContext));
 				transactionScope.Complete();
 			}
 
@@ -90,7 +94,7 @@
 			// Arrange
 			string queueName = "WhenTransactionRolledBack_ReceivedMessageIsKept";
 			string sentMessage = "message";
-			var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
+			var queue = new RedisMessageQueue(redisConfiguration, queueName);
 			string receivedMessageBeforeRollback = null;
 			string receivedMessageAfterRollback = null;
 
@@ -99,10 +103,10 @@
 			{
 				var transactionContext = 
 					new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
-
-				queue.Send(queueName, CreateStringMessage(sentMessage), 
+                
+				queue.Send(queueName, packer.Pack(sentMessage), 
 					new NoTransaction()); // simulate other transaction sent the message before
-				receivedMessageBeforeRollback = GetStringMessage(queue.ReceiveMessage(transactionContext));
+				receivedMessageBeforeRollback = packer.Unpack(queue.ReceiveMessage(transactionContext));
 
 				// rollback
 			}
@@ -111,7 +115,7 @@
 				var transactionContext = 
 					new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
 
-				receivedMessageAfterRollback = GetStringMessage(queue.ReceiveMessage(transactionContext));
+				receivedMessageAfterRollback = packer.Unpack(queue.ReceiveMessage(transactionContext));
 				transactionScope.Complete();
 			}
 
@@ -132,18 +136,18 @@
 			var transactionScope = new TransactionScope();
 			var transactionContext = 
 				new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
-			var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
+			var queue = new RedisMessageQueue(redisConfiguration, queueName);
 
 			// Act
 			foreach (var sentMessage in sentMessages)
 			{
-				queue.Send(queueName, CreateStringMessage(sentMessage), 
+				queue.Send(queueName, packer.Pack(sentMessage), 
 					new NoTransaction()); // simulate other transaction sent the message before
 			}
 
 			for (int i = 0; i < sentMessages.Length; i++)
 			{
-				receivedMessagesBeforeRollback[i] = GetStringMessage(queue.ReceiveMessage(transactionContext));
+				receivedMessagesBeforeRollback[i] = packer.Unpack(queue.ReceiveMessage(transactionContext));
 			}
 
 			transactionScope.Dispose(); // rollback
@@ -151,7 +155,7 @@
 
 			for (int i = 0; i < sentMessages.Length; i++)
 			{
-				receivedMessagesAfterRollback[i] = GetStringMessage(queue.ReceiveMessage(transactionContext));
+                receivedMessagesAfterRollback[i] = packer.Unpack(queue.ReceiveMessage(transactionContext));
 			}
 
 			transactionScope.Complete();
@@ -171,14 +175,14 @@
 			var transactionScope = new TransactionScope();
 			var transactionContext = 
 				new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
-			var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
+			var queue = new RedisMessageQueue(redisConfiguration, queueName);
 
 			// Act
-			queue.Send(queueName, CreateStringMessage(sentMessage), 
+			queue.Send(queueName, packer.Pack(sentMessage), 
 				new NoTransaction()); // simulate other transaction sent the message before
-			var receivedMessageBeforeRollback = GetStringMessage(queue.ReceiveMessage(transactionContext));
+			var receivedMessageBeforeRollback = packer.Unpack(queue.ReceiveMessage(transactionContext));
 			transactionScope.Dispose();
-			var receivedMessageAfterRollback = GetStringMessage(queue.ReceiveMessage(transactionContext));
+            var receivedMessageAfterRollback = packer.Unpack(queue.ReceiveMessage(transactionContext));
 
 			// Assert
 			Assert.AreEqual(sentMessage, receivedMessageBeforeRollback, "Receive message failed");
@@ -190,19 +194,19 @@
 		{
 			// Arrange
 			string queueName = "Throughput";
-			var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
+			var queue = new RedisMessageQueue(redisConfiguration, queueName);
 			Stopwatch swSend = new Stopwatch();
 			Stopwatch swReceive = new Stopwatch();
 			long sentMessages = 0;
 			long receivedMessages = 0;
 			var transactionContext = new NoTransaction();
-			var message = CreateStringMessage("simple message");
+			var message = packer.Pack("simple message");
 
 			// Act
 			swSend.Start();
-			Parallel.For(0, 50, new ParallelOptions { MaxDegreeOfParallelism = 50 }, (j) =>
+			Parallel.For(0, 5, new ParallelOptions { MaxDegreeOfParallelism = 50 }, (j) =>
 				{
-					for (int i = 0; i < 100; i++)
+					for (int i = 0; i < 10; i++)
 					{
 						queue.Send(queueName, message, transactionContext);
 						Interlocked.Increment(ref sentMessages);
@@ -212,12 +216,12 @@
 			swSend.Stop();
 
 			swReceive.Start();
-			Parallel.For(0, 50, new ParallelOptions { MaxDegreeOfParallelism = 50 }, (j) =>
+			Parallel.For(0, 5, new ParallelOptions { MaxDegreeOfParallelism = 50 }, (j) =>
 				{
-					for (int i = 0; i < 100; i++)
+					for (int i = 0; i < 10; i++)
 					{
 						var msg = queue.ReceiveMessage(transactionContext);
-						Assert.AreEqual("simple message", GetStringMessage(msg));
+						Assert.AreEqual("simple message", packer.Unpack(msg));
 						Interlocked.Increment(ref receivedMessages);
 					}
 				});
@@ -234,20 +238,20 @@
 		{
 			// Arrange
 			string queueName = "Throughput";
-			var queue = new RedisMessageQueue(server.ClientConfiguration, queueName);
+			var queue = new RedisMessageQueue(redisConfiguration, queueName);
 			Stopwatch sw = new Stopwatch();
 			long sentMessages = 0;
-			var message = CreateStringMessage("simple message");
+			var message = packer.Pack("simple message");
 
 			// Act
 			sw.Start();
-			Parallel.For(0, 50, (j) =>
+			Parallel.For(0, 5, (j) =>
 				{
 					var transactionScope = new TransactionScope();
 					var transactionContext = 
 						new Rebus.Bus.AmbientTransactionContext(); // enlists in ambient transaction
 
-					for (int i = 0; i < 200; i++)
+					for (int i = 0; i < 20; i++)
 					{
 						queue.Send(queueName, message, transactionContext);
 						Interlocked.Increment(ref sentMessages);
@@ -258,22 +262,6 @@
 			sw.Stop();
 
 			Assert.Pass(string.Format("Throughput of {0} messages / sec", sentMessages / sw.Elapsed.TotalSeconds));
-		}
-
-		protected TransportMessageToSend CreateStringMessage(string contents)
-		{
-			return
-                new TransportMessageToSend
-			{
-				Body = Encoding.UTF8.GetBytes(contents),
-				Label = typeof(string).FullName
-			};
-		}
-
-		protected string GetStringMessage(ReceivedTransportMessage message)
-		{
-			return message == null ? null :
-                Encoding.UTF8.GetString(message.Body);
 		}
 	}
 }

@@ -3,6 +3,7 @@
     using System;
     using System.Linq;
     using StackExchange.Redis;
+    using System.Collections.Generic;
 
     internal class RedisTransaction
     {
@@ -12,6 +13,7 @@
         private readonly Lazy<ITransaction> rollbackTx;
 
         private const string TransactionCounterKey = "rebus:transaction:counter";
+        private const string TransactionRunningKey = "rebus:transaction:running";
         private const string TransactionLockKey = "rebus:transaction:{0}";
 
         public RedisTransaction(IDatabase db, TimeSpan timeout)
@@ -20,6 +22,7 @@
             long transactionId = db.StringIncrement(TransactionCounterKey);
             this.transactionId = transactionId;
             db.StringSet(string.Format(TransactionLockKey, transactionId), transactionId, timeout, When.Always);
+            db.SetAdd(TransactionRunningKey, transactionId);
             commitTx = new Lazy<ITransaction>(() => this.db.CreateTransaction());
             rollbackTx = new Lazy<ITransaction>(() => this.db.CreateTransaction());
         }

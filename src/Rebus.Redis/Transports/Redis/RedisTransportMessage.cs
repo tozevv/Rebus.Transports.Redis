@@ -9,7 +9,7 @@
 	/// Message record stored in Redis.
 	/// </summary>
 	[Serializable]
-	internal class RedisTransportMessage
+	public class RedisTransportMessage
 	{
 		public byte[] Body { get; set; }
 
