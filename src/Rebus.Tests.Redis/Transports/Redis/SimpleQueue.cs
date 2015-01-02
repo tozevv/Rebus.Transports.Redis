@@ -2,6 +2,7 @@
 {
     using MsgPack.Serialization;
     using Rebus.Bus;
+    using System;
     using System.Collections.Generic;
     using System.Transactions;
 
@@ -9,8 +10,7 @@
     {
         private readonly MessagePackSerializer<T> serializer;
         private readonly IDuplexTransport transport;
-  
-
+       
         public SimpleQueue(IDuplexTransport transport)
         {
             this.serializer =  MessagePackSerializer.Get<T>();
@@ -19,7 +19,23 @@
 
         public ITransactionContext GetCurrentTransactionContext()
         {
-            return Transaction.Current == null ? new NoTransaction() as ITransactionContext : new Rebus.Bus.AmbientTransactionContext();
+            if (Transaction.Current == null)
+            {
+                return new NoTransaction();
+            }
+
+
+            var trans = new Rebus.Bus.AmbientTransactionContext();
+
+            if (SimulateBrokenTransaction)
+            {
+                trans.DoRollback += () =>
+                {
+                    throw new TransactionAbortedException();
+                };
+            }
+            return trans;
+
         }
 
         public void Send(T message)
@@ -60,6 +76,12 @@
                 receivedMessages.Add(receivedMessage);
             }
             return receivedMessages;
+        }
+
+        public bool SimulateBrokenTransaction
+        {
+            get;
+            set;
         }
     }
 }
