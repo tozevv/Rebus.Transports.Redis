@@ -1,19 +1,23 @@
 ﻿namespace Rebus.Tests.Transports.Redis
 {
     using NUnit.Framework;
+    using Rebus.Transports.Msmq;
+    using Rebus.Transports.Redis;
+    using StackExchange.Redis;
     using System;
     using System.Collections.Generic;
+    using System.Configuration;
     using System.Runtime.CompilerServices;
     using System.Threading;
     using System.Transactions;
 
 	/// <summary>
-	/// Unit tests for Rebus queues
+	/// Unit tests for Rebus queues / transports
 	/// </summary>
-	public abstract class QueueTests 
+    [TestFixture(typeof(RedisMessageQueue))]
+    [TestFixture(typeof(MsmqMessageQueue))]
+    public class RebusTransportTests<T> where T:IDuplexTransport
     {
-        public abstract SimpleQueue<string> GetQueueForTest([CallerMemberName] string caller = "");
-        
 		[Test]
 		public void WhenSendingMessage_ThenMessageIsDelivered()
 		{
@@ -30,7 +34,7 @@
 		}
 
         [Test]
-        public void WhenSendingMessages_ThenOrderIsKept()
+        public void WhenSendingMessages_ThenMessageOrderIsKept()
         {
             // Arrange
             var queue = GetQueueForTest();
@@ -195,7 +199,7 @@
         }
 
         [Test]
-        public void WhenReceivingAndRollingback_ThenOutOfOrder()
+        public void WhenReceivingFromTwoConsumersAndRollingbackFirst_ThenSecondConsumerReceivesOutOfOrder()
         {
             // Arrange
             string firstMessage = "first";
@@ -204,50 +208,74 @@
             string received2 = null;
             string received3 = null;
             var sendQueue = GetQueueForTest();
-            AutoResetEvent thread2Run = new AutoResetEvent(false);
-            AutoResetEvent thread1Run = new AutoResetEvent(false);
+            AutoResetEvent consumer2Run = new AutoResetEvent(false);
+            AutoResetEvent consumer1Run = new AutoResetEvent(false);
 
             // Act
             sendQueue.Send(firstMessage);
-            sendQueue.Send(secondMessage); 
+            sendQueue.Send(secondMessage);
 
-            Thread thread1 = new Thread(() =>
+            Thread consumer1 = new Thread(() =>
             {
                 using (var transactionScope = new TransactionScope())
                 {
                     var queue1 = GetQueueForTest();
                     received1 = queue1.Receive();
 
-                    thread2Run.Set(); thread1Run.WaitOne(); // run thread 2 and wait
+                    consumer2Run.Set(); consumer1Run.WaitOne(); // run consumer 2 and wait
 
                     transactionScope.Dispose(); 
                 }
-                thread2Run.Set(); // run thread 2
+                consumer2Run.Set(); // run consumer 2
             });
 
-            Thread thread2 = new Thread(() =>
+            Thread consumer2 = new Thread(() =>
             {
-                thread2Run.WaitOne();
+                consumer2Run.WaitOne();
                 using (var transactionScope = new TransactionScope())
                 {
                     var queue2 = GetQueueForTest();
                     received2 = queue2.Receive();
    
-                    thread1Run.Set(); thread2Run.WaitOne(); // run thread 1 and wait
+                    consumer1Run.Set(); consumer2Run.WaitOne(); // run consumer 1 and wait
 
                     received3 = queue2.Receive();
                     transactionScope.Complete();
                 }
             });
 
-            thread1.Start();
-            thread2.Start();
-            thread2.Join(TimeSpan.FromSeconds(5));
+            consumer1.Start();
+            consumer2.Start();
+            consumer2.Join(TimeSpan.FromSeconds(5));
 
             // Assert
             Assert.AreEqual(firstMessage, received1);
             Assert.AreEqual(secondMessage, received2);
             Assert.AreEqual(firstMessage, received3);
+        }
+
+        protected virtual IDuplexTransport GetTransport(string queueName)
+        {
+            if (typeof(T) == typeof(RedisMessageQueue))
+            {
+                string connectionString = ConfigurationManager.ConnectionStrings["RebusUnitTest"].ConnectionString;
+                var redisConfiguration = ConfigurationOptions.Parse(connectionString);
+                return new RedisMessageQueue(redisConfiguration, queueName) as IDuplexTransport;
+            }
+            else if (typeof(T) == typeof(MsmqMessageQueue))
+            {
+                return new MsmqMessageQueue(queueName) as IDuplexTransport;
+            }
+            else
+            {
+                Assert.Fail("Unknown type of duplex transport: ", typeof(T).FullName);
+                return null;
+            }
+        }
+
+        protected virtual SimpleQueue<string> GetQueueForTest([CallerMemberName] string caller = "")
+        {
+            return new SimpleQueue<string>(GetTransport(caller));
         }
 	}
 }
