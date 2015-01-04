@@ -61,8 +61,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Transports\Redis\MSMQBaselineTests.cs" />
-    <Compile Include="Transports\Redis\GenericQueueTests.cs" />
+    <Compile Include="Transports\Redis\MSMQTests.cs" />
+    <Compile Include="Transports\Redis\QueueTests.cs" />
     <Compile Include="Transports\Redis\RedisMessageQueueTests.cs" />
     <Compile Include="Transports\Redis\SimpleQueue.cs" />
   </ItemGroup>

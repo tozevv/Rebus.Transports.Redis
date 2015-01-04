@@ -1,6 +1,7 @@
 ﻿namespace Rebus.Tests.Transports.Redis
 {
     using NUnit.Framework;
+    using System;
     using System.Collections.Generic;
     using System.Runtime.CompilerServices;
     using System.Threading;
@@ -9,7 +10,7 @@
 	/// <summary>
 	/// Unit tests for Rebus queues
 	/// </summary>
-	public abstract class GenericQueueTests 
+	public abstract class QueueTests 
     {
         public abstract SimpleQueue<string> GetQueueForTest([CallerMemberName] string caller = "");
         
@@ -191,6 +192,62 @@
             // Assert
             Assert.AreEqual(message, receivedBeforeRollback);
             Assert.AreEqual(message, receivedAfterRollback);
+        }
+
+        [Test]
+        public void WhenReceivingAndRollingback_ThenOutOfOrder()
+        {
+            // Arrange
+            string firstMessage = "first";
+            string secondMessage = "second";
+            string received1 = null;
+            string received2 = null;
+            string received3 = null;
+            var sendQueue = GetQueueForTest();
+            AutoResetEvent thread2Run = new AutoResetEvent(false);
+            AutoResetEvent thread1Run = new AutoResetEvent(false);
+
+            // Act
+            sendQueue.Send(firstMessage);
+            sendQueue.Send(secondMessage); 
+
+            Thread thread1 = new Thread(() =>
+            {
+                using (var transactionScope = new TransactionScope())
+                {
+                    var queue1 = GetQueueForTest();
+                    received1 = queue1.Receive();
+
+                    thread2Run.Set(); thread1Run.WaitOne(); // run thread 2 and wait
+
+                    transactionScope.Dispose(); 
+                }
+                thread2Run.Set(); // run thread 2
+            });
+
+            Thread thread2 = new Thread(() =>
+            {
+                thread2Run.WaitOne();
+                using (var transactionScope = new TransactionScope())
+                {
+                    var queue2 = GetQueueForTest();
+                    received2 = queue2.Receive();
+   
+                    thread1Run.Set(); thread2Run.WaitOne(); // run thread 1 and wait
+
+                    received3 = queue2.Receive();
+                    transactionScope.Complete();
+                }
+            });
+
+            thread1.Start();
+            thread2.Start();
+            thread2.Join(TimeSpan.FromSeconds(5));
+
+            // Assert
+            Assert.AreEqual(firstMessage, received1);
+            Assert.AreEqual(secondMessage, received2);
+            Assert.AreEqual(firstMessage, received3);
         }
 	}
 }

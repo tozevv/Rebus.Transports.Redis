@@ -2,7 +2,6 @@
 {
     using MsgPack.Serialization;
     using Rebus.Bus;
-    using System;
     using System.Collections.Generic;
     using System.Transactions;
 
@@ -24,7 +23,6 @@
                 return new NoTransaction();
             }
 
-
             var trans = new Rebus.Bus.AmbientTransactionContext();
 
             if (SimulateBrokenTransaction)
@@ -35,7 +33,6 @@
                 };
             }
             return trans;
-
         }
 
         public void Send(T message)
