@@ -14,7 +14,7 @@
 			var redisTransaction = context[RedisContextKey] as RedisTransactionManager;
 			if (redisTransaction == null)
 			{
-				redisTransaction = new RedisTransactionManager(context, database, TimeSpan.FromMinutes(1));
+				redisTransaction = new RedisTransactionManager(context, database, TimeSpan.FromSeconds(5));
                 if (context.IsTransactional)
                 {
                     redisTransaction.BeginTransaction();

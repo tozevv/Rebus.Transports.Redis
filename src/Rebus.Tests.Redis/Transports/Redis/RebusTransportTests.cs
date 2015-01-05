@@ -190,7 +190,7 @@
             }
             catch (TransactionAbortedException) { }
 
-            Thread.Sleep(1000);
+            Thread.Sleep(6000);
             receivedAfterRollback = queue.Receive();
 
             // Assert

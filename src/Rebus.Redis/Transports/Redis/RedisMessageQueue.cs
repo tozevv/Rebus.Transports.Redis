@@ -5,25 +5,18 @@
     using System;
     using System.IO;
     using System.Linq;
-    using System.Threading.Tasks;
 
-	/// <summary>
+    /// <summary>
 	/// Implementation of a DuplexTransport using Redis List with push / pop operations.
 	/// Durability requires AOF enabled in Redis.
-	/// 
-	/// 
-	/// if context is transactional the algorithm works like this:
-	/// - message ids are read and copied to a rollback queue associated with the transaction in an atomic operation
-	/// - commit: messages with a specific key id are removed
-	/// - rollback: messages are atomically copied from rollback queue back to the queue in an atomic operation
-	/// - failure to commit / abort: purge rollback log moves messages from rollback queue back to the queue in an atomic operation
-	///   a failure is detected via a transaction timeout.
 	/// </summary>
 	public class RedisMessageQueue : IDuplexTransport, IDisposable
 	{
 		private const string MessageCounterKeyFormat = "rebus:message:counter";
 		private const string QueueKeyFormat = "rebus:queue:{0}";
 		private const string RollbackQueueKeyFormat = "rebus:queue:{0}:rollback:{1}";
+        private const string TransactionSetKeyFormat = "rebus:queue:{0}:transactions";
+
 		private readonly ConnectionMultiplexer redis;
 		private readonly string inputQueueName;
         private readonly MessagePackSerializer<RedisTransportMessage> serializer;
@@ -72,7 +65,6 @@
 
             var serializedMessage = this.serializer.PackSingleObject(redisMessage);
 
-         
             var tx = txManager.CommitTx;
             tx.StringSetAsync(redisMessage.Id, serializedMessage, expiry, When.Always);
             tx.ListLeftPushAsync(queueKey, redisMessage.Id);
@@ -94,14 +86,19 @@
             {
                 // purge rollback log from previous calls
                 #pragma warning disable 4014
-                PurgeRollbackLog();
+                CleanupRollbacks();
                 #pragma warning restore 4014
                 
                 // atomically copy message id from queue to specific transaction rollback queue
+              
+                RedisValue incomingMessageId;
+ 
                 RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, txManager.TransactionId);
-                RedisValue incomingMessageId = db.ListRightPopLeftPush(queueKey, rollbackQueueKey, CommandFlags.PreferMaster);
-                db.KeyExpire(rollbackQueueKey, TimeSpan.FromSeconds(30));
+                RedisKey transactionSetKey = string.Format(TransactionSetKeyFormat, this.inputQueueName);
 
+                db.SetAdd(transactionSetKey, txManager.TransactionId);
+                incomingMessageId = db.ListRightPopLeftPush(queueKey, rollbackQueueKey, CommandFlags.PreferMaster);
+                
                 if (incomingMessageId.IsNull)
                 {
                     return null;
@@ -150,33 +147,26 @@
 			}
 		}
 
-		private async Task PurgeRollbackLog()
+		private void CleanupRollbacks()
 		{
-            /*
-			IDatabase db = this.redis.GetDatabase();
-			IServer server = this.redis.GetServer(this.redis.GetEndPoints().First());
+            IDatabase db = this.redis.GetDatabase();
+            RedisKey transactionSetKey = string.Format(TransactionSetKeyFormat, this.inputQueueName);
+        
+            RedisKey queueKey = string.Format(QueueKeyFormat, this.inputQueueName);
+            var transactionIds = db.SetMembers(transactionSetKey).Select(t => (long)t);
 
-			// search all existing rollback queues 
-			// and move 
-			var rollbackQueues = server.Keys(0, string.Format(RollbackQueueKeyFormat, "*", "*"));
+            foreach (var transactionId in transactionIds)
+            {
+                if (!RedisTransactionManager.IsTransactionActive(db, transactionId))
+                {
+                    RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, transactionId);
+                    while (db.ListRightPopLeftPush(rollbackQueueKey, queueKey, CommandFlags.PreferMaster) != RedisValue.Null)
+                    {
 
-			foreach (var rollbackQueueKey in rollbackQueues)
-			{
-				string rollbackQueueString = rollbackQueueKey;
-
-				string inputQueueName = rollbackQueueString.ParseFormat(RollbackQueueKeyFormat, 0);
-				long transactionId = long.Parse(rollbackQueueString.ParseFormat(RollbackQueueKeyFormat, 1));
-         
-				if (!RedisTransactionManager.IsTransactionActive(db, transactionId))
-				{
-					RedisKey queueKey = string.Format(QueueKeyFormat, inputQueueName);
-
-					// rollback all messages on the rollback queue.
-					while (await db.ListRightPopLeftPushAsync(rollbackQueueKey, queueKey, CommandFlags.PreferMaster) != RedisValue.Null)
-					{
-					}
-				}
-			}*/
-		}
+                    }
+                }
+                db.SetRemove(TransactionSetKeyFormat, new RedisValue[] { transactionId });
+            }
+        }
 	}
 }

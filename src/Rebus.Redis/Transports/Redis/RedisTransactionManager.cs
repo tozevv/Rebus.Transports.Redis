@@ -8,7 +8,6 @@
     internal class RedisTransactionManager
     {
         private const string TransactionCounterKey = "rebus:transaction:counter";
-        private const string TransactionRunningKey = "rebus:transaction:running";
         private const string TransactionLockKey = "rebus:transaction:{0}";
 
         private readonly IDatabase db;
@@ -32,7 +31,7 @@
         {
             this.TransactionId = db.StringIncrement(TransactionCounterKey);
             db.StringSet(string.Format(TransactionLockKey, this.TransactionId), this.TransactionId, timeout, When.Always);
-            db.SetAdd(TransactionRunningKey, this.TransactionId);
+     
             context.DoCommit += () =>
 			{
                 this.CommitTx.KeyDeleteAsync(string.Format(TransactionLockKey, this.TransactionId));
