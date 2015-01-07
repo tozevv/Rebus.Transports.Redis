@@ -58,16 +58,22 @@
             RedisKey queueKey = string.Format(QueueKeyFormat, destinationQueueName);
             var txManager = context.GetTransactionManager(db);
       
-			var id = db.StringIncrement(MessageCounterKeyFormat);
+            /*var tx = txManager.CommitTx;
+            tx.ScriptEvaluateAsync(@"
+                local message_id = redis.call('INCR', 'KEYS[1]')
+                
+            "),*/ 
 
-            var redisMessage = new RedisTransportMessage(id.ToString(), message);
+            var redisMessage = new RedisTransportMessage(message);
             var expiry = redisMessage.GetMessageExpiration();
 
             var serializedMessage = this.serializer.PackSingleObject(redisMessage);
 
+            var id = db.StringIncrement(MessageCounterKeyFormat).ToString();
+
             var tx = txManager.CommitTx;
-            tx.StringSetAsync(redisMessage.Id, serializedMessage, expiry, When.Always);
-            tx.ListLeftPushAsync(queueKey, redisMessage.Id);
+            tx.StringSetAsync(id, serializedMessage, expiry, When.Always);
+            tx.ListLeftPushAsync(queueKey, id);
             
             if (!context.IsTransactional) 
             {
@@ -80,7 +86,9 @@
 			IDatabase db = this.redis.GetDatabase();
             RedisKey queueKey = string.Format(QueueKeyFormat, this.inputQueueName);
             var txManager = context.GetTransactionManager(db);
-            byte[] serializedMessage = null;            
+            byte[] serializedMessage = null;
+            string messageId = null;
+
 
             if (context.IsTransactional)
             {
@@ -104,15 +112,17 @@
                     return null;
                 }
 
+                messageId = incomingMessageId.ToString();
+
                 // ok, a message was read and the transaction commited
                 // prepater the key for deletion in the single transaction commit
-                txManager.CommitTx.KeyDeleteAsync(incomingMessageId.ToString());
+                txManager.CommitTx.KeyDeleteAsync(messageId);
                 txManager.CommitTx.ListRightPopAsync(rollbackQueueKey);
 
                 // atomically prepare rollback, moving the message id back to the queue
                 txManager.RollbackTx.ListRightPopLeftPushAsync(rollbackQueueKey, queueKey, CommandFlags.PreferMaster);
 
-                serializedMessage = db.StringGet(incomingMessageId.ToString());
+                serializedMessage = db.StringGet(messageId);
             }
             else
             {
@@ -124,10 +134,12 @@
                     return null;
                 }
 
-                serializedMessage = db.StringGet(incomingMessageId.ToString());
+                messageId = incomingMessageId.ToString();
+
+                serializedMessage = db.StringGet(messageId);
 
                 #pragma warning disable 4014
-                db.KeyDeleteAsync(incomingMessageId.ToString());
+                db.KeyDeleteAsync(messageId);
                 #pragma warning restore 4014
             }
 
@@ -136,7 +148,7 @@
                 return null; // probably expired....
             }
 			var message = this.serializer.UnpackSingleObject(serializedMessage);
-            return message.ToReceivedTransportMessage();
+            return message.ToReceivedTransportMessage(messageId);
 		}
 
 		public void Dispose()

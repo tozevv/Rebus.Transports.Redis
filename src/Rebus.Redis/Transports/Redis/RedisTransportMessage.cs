@@ -8,14 +8,14 @@
 	/// </summary>
 	[Serializable]
 	public class RedisTransportMessage
+
 	{
         public RedisTransportMessage()
         {
         }
 
-        public RedisTransportMessage(string id, TransportMessageToSend send)
+        public RedisTransportMessage(TransportMessageToSend send)
         {
-            Id = id;
             Body = send.Body;
             Headers = send.Headers;
             Label = send.Label;
@@ -25,15 +25,13 @@
 
 		public IDictionary<string, object> Headers { get; set; }
 
-		public string Id { get; set; }
-
 		public string Label { get; set; }
         
-        public ReceivedTransportMessage ToReceivedTransportMessage()
+        public ReceivedTransportMessage ToReceivedTransportMessage(string id)
         {
             return new ReceivedTransportMessage()
             {
-                Id = this.Id,
+                Id = id,
                 Body = this.Body,
                 Headers = this.Headers,
                 Label = this.Label
