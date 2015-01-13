@@ -57,24 +57,15 @@
 			IDatabase db = this.redis.GetDatabase();
             RedisKey queueKey = string.Format(QueueKeyFormat, destinationQueueName);
             var txManager = context.GetTransactionManager(db);
-      
-            /*var tx = txManager.CommitTx;
-            tx.ScriptEvaluateAsync(@"
-                local message_id = redis.call('INCR', 'KEYS[1]')
-                
-            "),*/ 
 
             var redisMessage = new RedisTransportMessage(message);
             var expiry = redisMessage.GetMessageExpiration();
-
             var serializedMessage = this.serializer.PackSingleObject(redisMessage);
 
-            var id = db.StringIncrement(MessageCounterKeyFormat).ToString();
-
             var tx = txManager.CommitTx;
-            tx.StringSetAsync(id, serializedMessage, expiry, When.Always);
-            tx.ListLeftPushAsync(queueKey, id);
-            
+
+            tx.SendMessageAsync(serializedMessage, queueKey, expiry);
+ 
             if (!context.IsTransactional) 
             {
                 tx.Execute();
@@ -88,7 +79,6 @@
             var txManager = context.GetTransactionManager(db);
             byte[] serializedMessage = null;
             string messageId = null;
-
 
             if (context.IsTransactional)
             {

@@ -34,6 +34,23 @@
 		}
 
         [Test]
+        public void WhenSendingMessageAndExpiring_ThenMessageIsNotDelivered()
+        {
+            // Arrange
+            var queue = GetQueueForTest();
+            string message = "aMessage";
+            TimeSpan expireIn = TimeSpan.FromSeconds(1); // redis supports min 1 second
+
+            // Act
+            queue.Send(message, expireIn);
+            Thread.Sleep((int)expireIn.TotalMilliseconds);
+            string receivedMessage = queue.Receive();
+
+            // Assert
+            Assert.IsNull(receivedMessage);
+        }
+
+        [Test]
         public void WhenSendingMessages_ThenMessageOrderIsKept()
         {
             // Arrange
