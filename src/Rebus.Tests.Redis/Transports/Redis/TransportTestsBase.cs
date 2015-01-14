@@ -14,9 +14,7 @@
 	/// <summary>
 	/// Unit tests for Rebus queues / transports
 	/// </summary>
-    [TestFixture(typeof(RedisMessageQueue))]
-    [TestFixture(typeof(MsmqMessageQueue))]
-    public class RebusTransportTests<T> where T:IDuplexTransport
+    public abstract class TransportTestsBase<T> where T:IDuplexTransport
     {
 		[Test]
 		public void WhenSendingMessage_ThenMessageIsDelivered()
@@ -271,28 +269,11 @@
             Assert.AreEqual(firstMessage, received3);
         }
 
-        protected virtual IDuplexTransport GetTransport(string queueName)
-        {
-            if (typeof(T) == typeof(RedisMessageQueue))
-            {
-                string connectionString = ConfigurationManager.ConnectionStrings["RebusUnitTest"].ConnectionString;
-                var redisConfiguration = ConfigurationOptions.Parse(connectionString);
-                return new RedisMessageQueue(redisConfiguration, queueName) as IDuplexTransport;
-            }
-            else if (typeof(T) == typeof(MsmqMessageQueue))
-            {
-                return new MsmqMessageQueue(queueName) as IDuplexTransport;
-            }
-            else
-            {
-                Assert.Fail("Unknown type of duplex transport: ", typeof(T).FullName);
-                return null;
-            }
-        }
-
         protected virtual SimpleQueue<string> GetQueueForTest([CallerMemberName] string caller = "")
         {
             return new SimpleQueue<string>(GetTransport(caller));
         }
+
+        protected abstract IDuplexTransport GetTransport(string queueName);
 	}
 }

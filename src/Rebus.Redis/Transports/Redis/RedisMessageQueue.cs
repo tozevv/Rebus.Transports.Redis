@@ -12,7 +12,6 @@
 	/// </summary>
 	public class RedisMessageQueue : IDuplexTransport, IDisposable
 	{
-		private const string MessageCounterKeyFormat = "rebus:message:counter";
 		private const string QueueKeyFormat = "rebus:queue:{0}";
 		private const string RollbackQueueKeyFormat = "rebus:queue:{0}:rollback:{1}";
         private const string TransactionSetKeyFormat = "rebus:queue:{0}:transactions";

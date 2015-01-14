@@ -1,10 +1,10 @@
 ﻿namespace Rebus.Tests.Transports.Redis
 {
     using MsgPack.Serialization;
-using Rebus.Bus;
-using System;
-using System.Collections.Generic;
-using System.Transactions;
+    using Rebus.Bus;
+    using System;
+    using System.Collections.Generic;
+    using System.Transactions;
 
     public class SimpleQueue<T>  where T:class
     {
