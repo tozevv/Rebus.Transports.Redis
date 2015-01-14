@@ -116,20 +116,7 @@
             else
             {
                 // no transaction here, just retrieve the key id from que Redis list
-                RedisValue incomingMessageId = db.ListRightPop(queueKey, CommandFlags.None);
-
-                if (incomingMessageId.IsNull)
-                {
-                    return null;
-                }
-
-                messageId = incomingMessageId.ToString();
-
-                serializedMessage = db.StringGet(messageId);
-
-                #pragma warning disable 4014
-                db.KeyDeleteAsync(messageId);
-                #pragma warning restore 4014
+                serializedMessage = db.ReceiveMessage(queueKey);
             }
 
             if (serializedMessage == null)
