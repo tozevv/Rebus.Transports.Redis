@@ -15,6 +15,7 @@
         {
             string connectionString = ConfigurationManager.ConnectionStrings["RebusUnitTest"].ConnectionString;
             var redisConfiguration = ConfigurationOptions.Parse(connectionString);
+            redisConfiguration.ResolveDns = true;
             return new RedisMessageQueue(redisConfiguration, queueName) as IDuplexTransport;
         }
     }

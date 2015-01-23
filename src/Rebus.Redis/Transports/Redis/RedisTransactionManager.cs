@@ -15,9 +15,7 @@
         private readonly Lazy<ITransaction> rollbackTx;
         private readonly ITransactionContext context;
         private readonly TimeSpan timeout;
-
-        private bool open = false;
-
+     
         public RedisTransactionManager(ITransactionContext context, IDatabase db, TimeSpan timeout)
         {
             this.db = db;
@@ -43,7 +41,7 @@
                 this.RollbackTx.KeyDeleteAsync(string.Format(TransactionLockKey, this.TransactionId));
                 this.RollbackTx.Execute();
 			};
-            open = true;
+
         }
       
         public long TransactionId

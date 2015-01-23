@@ -32,9 +32,9 @@
 			{
 				this.redis = ConnectionMultiplexer.Connect(configOptions, tw);
 			}
-			catch
+            catch(Exception ex)
 			{
-				throw new Exception(tw.ToString());
+				throw new Exception(tw.ToString(), ex);
 
 			}
             this.serializer = MessagePackSerializer.Get<RedisTransportMessage>();

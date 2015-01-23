@@ -47,7 +47,7 @@
 			{
 				throw new ConfigurationException("You need to specify an input queue.");
 			}
-
+                
 			var redisMessageQueue = new RedisMessageQueue(options, inputQueue);
 
 			configurer.UseSender(redisMessageQueue);

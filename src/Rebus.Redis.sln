@@ -28,7 +28,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 	EndGlobalSection
 	GlobalSection(MonoDevelopProperties) = preSolution
-		StartupItem = Rebus.Redis.Tests\Rebus.Tests.Redis.csproj
+		StartupItem = Rebus.Tests.Redis\Rebus.Tests.Redis.csproj
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
