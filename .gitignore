@@ -34,3 +34,5 @@ _ReSharper*/
 *.zip
 *.[Pp]ublish.xml
 StyleCop.cache
+packages/
+!packages/StackExchange.Redis.Mon/
