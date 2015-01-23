@@ -1,4 +1,4 @@
-Rebus.Redis
-===========
+Rebus.Transports.Redis
+======================
 
-Redis based rebus transport.
+Redis Transport for Rebus
