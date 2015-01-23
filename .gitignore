@@ -35,4 +35,4 @@ _ReSharper*/
 *.[Pp]ublish.xml
 StyleCop.cache
 packages/
-!packages/StackExchange.Redis.Mon/
+!packages/StackExchange.Redis.Mono/
