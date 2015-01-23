@@ -36,3 +36,5 @@ _ReSharper*/
 StyleCop.cache
 !src/packages/StackExchange.Redis.Mono/*
 src/packages/*
+
+src/.nuget/packages.config
