@@ -7,7 +7,7 @@
     <ProjectGuid>{8A1FAE43-3D45-4A48-AF99-8503676CEAA8}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Rebus.Redis.Tests</RootNamespace>
+    <RootNamespace>Rebus.Transports.Redis.Tests</RootNamespace>
     <AssemblyName>Rebus.Redis.Tests</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -62,10 +62,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Transports\Redis\RedisTransportTests.cs" />
-    <Compile Include="Transports\Redis\MsmqTransportTests.cs" />
-    <Compile Include="Transports\Redis\TransportTestsBase.cs" />
-    <Compile Include="Transports\Redis\SimpleQueue.cs" />
+    <Compile Include="MsmqTransportTests.cs" />
+    <Compile Include="RedisTransportTests.cs" />
+    <Compile Include="SimpleQueue.cs" />
+    <Compile Include="TransportTestsBase.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config">
@@ -89,7 +89,7 @@
   </Target>
   -->
   <ItemGroup>
-    <ProjectReference Include="..\Rebus.Redis\Rebus.Transports.Redis.csproj">
+    <ProjectReference Include="..\Rebus.Transports.Redis\Rebus.Transports.Redis.csproj">
       <Project>{E245B518-AD87-455B-AB64-EE4F9886B490}</Project>
       <Name>Rebus.Transports.Redis</Name>
     </ProjectReference>

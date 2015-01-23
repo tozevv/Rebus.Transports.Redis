@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package>
+  <metadata>
+    <id>Rebus.Transports.Redis</id>
+    <authors>tozevv/authors>
+    <owners>tozevv</owners>
+    <summary>Redis Transport for Rebus</summary>
+    <description>High performance Redis transport with transactional level support for Rebus.</tags>
+    <language>en-US</language>    
+    <projectUrl>https://github.com/tozevv/Rebus.Transports.Redis</projectUrl>
+    <licenseUrl>https://github.com/tozevv/Rebus.Transports.Redis/master/LICENSE</licenseUrl>
+    <copyright>António Vieira (c) 2015</copyright>
+    <dependencies>
+      <group targetFramework="net45">
+        <dependency id="MsgPack.Cli" version="0.5.8"/>
+        <dependency id="Rebus" version="0.77.1"/>
+        <dependency id="StackExchange.Redis" version="1.0.394"/>
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="Rebus.Transports.Redis\bin\Release\Rebus.Transports.Redis.dll" target="lib\net45" />
+  </files>
+</package>

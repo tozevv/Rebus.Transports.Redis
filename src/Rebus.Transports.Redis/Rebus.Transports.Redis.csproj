@@ -7,7 +7,7 @@
     <ProjectGuid>{E245B518-AD87-455B-AB64-EE4F9886B490}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Rebus.Redis</RootNamespace>
+    <RootNamespace>Rebus.Transports.Redis</RootNamespace>
     <AssemblyName>Rebus.Redis</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -52,12 +52,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Transports\Redis\LuaScripts.cs" />
-    <Compile Include="Transports\Redis\RedisMessageQueue.cs" />
-    <Compile Include="Transports\Redis\RedisMessageQueueConfigurationExtension.cs" />
-    <Compile Include="Transports\Redis\RedisTransportMessage.cs" />
-    <Compile Include="Transports\Redis\RedisTransactionManager.cs" />
-    <Compile Include="Transports\Redis\TransactionContextExtensions.cs" />
+    <Compile Include="LuaScripts.cs" />
+    <Compile Include="RedisMessageQueue.cs" />
+    <Compile Include="RedisMessageQueueConfigurationExtension.cs" />
+    <Compile Include="RedisTransactionManager.cs" />
+    <Compile Include="RedisTransportMessage.cs" />
+    <Compile Include="TransactionContextExtensions.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

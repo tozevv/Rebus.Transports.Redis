@@ -1,4 +1,4 @@
-﻿namespace Rebus.Tests.Transports.Redis
+﻿namespace Rebus.Transports.Redis.Tests
 {
     using MsgPack.Serialization;
     using Rebus.Bus;
