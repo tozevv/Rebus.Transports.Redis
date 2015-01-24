@@ -5,7 +5,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rebus.Transports.Redis", "R
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rebus.Transports.Redis.Tests", "Rebus.Transports.Redis.Tests\Rebus.Transports.Redis.Tests.csproj", "{8A1FAE43-3D45-4A48-AF99-8503676CEAA8}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{B9287387-6B69-434C-B6CB-7F0FF09B2DD1}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{D1DD7D2A-3993-4E55-9565-C900F8266F52}"
+	ProjectSection(SolutionItems) = preProject
+		Rebus.Transports.Redis.nuspec = Rebus.Transports.Redis.nuspec
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

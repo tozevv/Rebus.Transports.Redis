@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("Rebus.Transports.Redis.Tests")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Redis transport / message queue for Rebus with transaction support.")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("Rebus.Transports.Redis.Tests")]

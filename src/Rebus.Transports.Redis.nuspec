@@ -5,7 +5,8 @@
     <authors>tozevv/authors>
     <owners>tozevv</owners>
     <summary>Redis Transport for Rebus</summary>
-    <description>High performance Redis transport with transactional level support for Rebus.</tags>
+    <version>$version$</version>
+    <description>$description$</tags>
     <language>en-US</language>    
     <projectUrl>https://github.com/tozevv/Rebus.Transports.Redis</projectUrl>
     <licenseUrl>https://github.com/tozevv/Rebus.Transports.Redis/master/LICENSE</licenseUrl>
