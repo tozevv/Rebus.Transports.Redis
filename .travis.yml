@@ -12,5 +12,8 @@ before_install:
 
 script:
  - cd src
+ - mono .nuget/NuGet.exe Restore Rebus.Transports.Redis.sln
  - xbuild /p:configuration=Release
  - .ci/nunit.sh Rebus.Transports.Redis/bin/Release/Rebus.Transports.Redis.dll
+ - mono .nuget/NuGet.exe Pack Rebus.Transports.Redis.nuspec
+
