@@ -1,14 +1,16 @@
-language: c
+language: objective-c
+
+env:
+ global:
+  - EnableNuGetPackageRestore=true 
+ matrix:
+  - MONO_VERSION="3.8.0"
 
 before_install:
-  - sudo apt-get update -qq > /dev/null
-  - sudo apt-get install -qq mono-devel mono-gmcs > /dev/null
-  - mozroots --import --sync
-  - mv -f src/.nuget/NuGet.mono.targets src/.nuget/NuGet.targets
-  - chmod +x lib/xunit/xunit.console.clr4.x86.exe
-  - export EnableNuGetPackageRestore=true
+ - wget "http://download.mono-project.com/archive/${MONO_VERSION}/macos-10-x86/MonoFramework-MDK-${MONO_VERSION}.macos10.xamarin.x86.pkg"
+ - sudo installer -pkg "MonoFramework-MDK-${MONO_VERSION}.macos10.xamarin.x86.pkg" -target /
 
 script:
-  - cd src/
-  - xbuild /p:Configuration=Release Rebus.Transports.Redis.sln
-  - mono ../lib/xunit/xunit.console.clr4.x86.exe Rebus.Transports.Redis.Tests/bin/Release/Rebus.Transports.Redis.Tests.dll
+ - cd src
+ - xbuild /p:configuration=Release
+ - .ci/nunit.sh Rebus.Transports.Redis/bin/Release/Rebus.Transports.Redis.dll

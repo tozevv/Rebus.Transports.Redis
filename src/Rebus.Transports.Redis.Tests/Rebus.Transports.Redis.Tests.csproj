@@ -8,7 +8,7 @@
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Rebus.Transports.Redis.Tests</RootNamespace>
-    <AssemblyName>Rebus.Redis.Tests</AssemblyName>
+    <AssemblyName>Rebus.Transports.Redis.Tests</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
