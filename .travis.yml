@@ -5,14 +5,15 @@ env:
   - EnableNuGetPackageRestore=true 
  matrix:
   - MONO_VERSION="3.8.0"
-services:
-  - redis-server
+
 before_install:
  - wget "http://download.mono-project.com/archive/${MONO_VERSION}/macos-10-x86/MonoFramework-MDK-${MONO_VERSION}.macos10.xamarin.x86.pkg"
  - sudo installer -pkg "MonoFramework-MDK-${MONO_VERSION}.macos10.xamarin.x86.pkg" -target /
  - mono src/.nuget/nuget.exe install NUnit.Runners -Version 2.6.4 -OutputDirectory src/.testrunner
+ - brew install redis
  
 script:
+ - redis-server
  - redis-benchmark
 # - cd src
 # - mono .nuget/nuget.exe Restore Rebus.Transports.Redis.sln
