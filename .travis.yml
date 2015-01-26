@@ -9,11 +9,11 @@ env:
 before_install:
  - wget "http://download.mono-project.com/archive/${MONO_VERSION}/macos-10-x86/MonoFramework-MDK-${MONO_VERSION}.macos10.xamarin.x86.pkg"
  - sudo installer -pkg "MonoFramework-MDK-${MONO_VERSION}.macos10.xamarin.x86.pkg" -target /
+ - mono .nuget/nuget.exe install NUnit.Runners -Version 2.6.4 -OutputDirectory testrunner
  
 script:
  - cd src
- - mono .nuget/NuGet.exe Restore Rebus.Transports.Redis.sln
+ - mono .nuget/nuget.exe Restore Rebus.Transports.Redis.sln
  - xbuild /p:Configuration=Release Rebus.Transports.Redis.sln
- - mono ../testrunner/NUnit.Runners.2.6.4/tools/nunit-console.exe ./MyPoject.Tests/bin/Release/MyProject.Tests.dll
- - mono .nuget/NuGet.exe Pack Rebus.Transports.Redis\Rebus.Transports.Redis.csproj
- - mono .nuget/nuget.exe install NUnit.Runners -Version 2.6.4 -OutputDirectory testrunner
+ - mono ../testrunner/NUnit.Runners.2.6.4/tools/nunit-console.exe Rebus.Transports.Redis.Tests/bin/Release/Rebus.Transports.Redis.Tests.dll
+ - mono .nuget/nuget.exe Pack Rebus.Transports.Redis/Rebus.Transports.Redis.csproj
