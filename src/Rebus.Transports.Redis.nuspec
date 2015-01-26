@@ -2,11 +2,11 @@
 <package>
   <metadata>
     <id>Rebus.Transports.Redis</id>
-    <authors>tozevv/authors>
+    <authors>tozevv</authors>
     <owners>tozevv</owners>
     <summary>Redis Transport for Rebus</summary>
     <version>$version$</version>
-    <description>$description$</tags>
+    <description>Redis Transport for Rebus with transactional support.</description>
     <language>en-US</language>    
     <projectUrl>https://github.com/tozevv/Rebus.Transports.Redis</projectUrl>
     <licenseUrl>https://github.com/tozevv/Rebus.Transports.Redis/master/LICENSE</licenseUrl>
@@ -20,6 +20,6 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="Rebus.Transports.Redis\bin\Release\Rebus.Transports.Redis.dll" target="lib\net45" />
+    <file src="Rebus.Transports.Redis/bin/Release/Rebus.Transports.Redis.dll" target="lib\net45" />
   </files>
 </package>
