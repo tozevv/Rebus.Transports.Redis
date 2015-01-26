@@ -184,6 +184,7 @@
         }
 
         [Test]
+        [Ignore]
         public void WhenReceivingAndAbortingTransaction_ThenMessageIsKept()
         {
             // Arrange
