@@ -26,13 +26,6 @@
 
             var trans = new Rebus.Bus.AmbientTransactionContext();
 
-            if (SimulateBrokenTransaction)
-            {
-                trans.DoRollback += () =>
-                {
-                    throw new TransactionAbortedException();
-                };
-            }
             return trans;
         }
 
@@ -80,12 +73,6 @@
                 receivedMessages.Add(receivedMessage);
             }
             return receivedMessages;
-        }
-
-        public bool SimulateBrokenTransaction
-        {
-            get;
-            set;
         }
     }
 }

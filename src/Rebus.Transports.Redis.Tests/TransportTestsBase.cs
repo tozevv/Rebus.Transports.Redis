@@ -184,37 +184,6 @@
         }
 
         [Test]
-        [Ignore]
-        public void WhenReceivingAndAbortingTransaction_ThenMessageIsKept()
-        {
-            // Arrange
-            var queue = GetQueueForTest();
-            string message = "aMessage";
-            string receivedBeforeRollback = null;
-            string receivedAfterRollback = null;
-
-            // Act   
-            queue.Send(message);
-
-            try
-            {
-                using (var transactionScope = new TransactionScope())
-                {
-                    queue.SimulateBrokenTransaction = true;
-                    receivedBeforeRollback = queue.Receive();
-                }
-            }
-            catch (TransactionAbortedException) { }
-
-            Thread.Sleep(6000);
-            receivedAfterRollback = queue.Receive();
-
-            // Assert
-            Assert.AreEqual(message, receivedBeforeRollback);
-            Assert.AreEqual(message, receivedAfterRollback);
-        }
-
-        [Test]
         public void WhenReceivingFromTwoConsumersAndRollingbackFirst_ThenSecondConsumerReceivesOutOfOrder()
         {
             // Arrange
