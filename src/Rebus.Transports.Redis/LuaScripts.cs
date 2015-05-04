@@ -5,27 +5,7 @@
 
     internal static class LuaScripts
     {
-        public static void ScriptSendMessageAsync(this IDatabaseAsync db, RedisValue serializedMessage, RedisKey queueKey, TimeSpan? expiry)
-        {
-            // redis expiration needs to be on the nearest "second"
-            long expirationInSeconds = Convert.ToInt64(expiry.HasValue ? expiry.Value.TotalSeconds : 0);
-
-            db.ScriptEvaluateAsync(@"
-                -- increment sequential message id
-                local message_id = redis.call('INCR', 'rebus:message:counter')
-                
-                -- create message key with proper expiration
-                redis.call('SET', message_id, ARGV[1])
-                if tonumber(ARGV[2]) > 0 then
-                    redis.call('EXPIRE', message_id, ARGV[2])
-                end
-
-                -- push message id to queue
-                redis.call('LPUSH', KEYS[1], message_id)"
-
-                , new RedisKey[] { queueKey }, 
-                new RedisValue[] { serializedMessage, expirationInSeconds });            
-        }
+       
 
         public static RedisValue ScriptReceiveMessage(this IDatabase db,  RedisKey queueKey)
         {
@@ -38,15 +18,15 @@
                     -- get message from message id
                     local message = redis.call('GET', message_id)
                     redis.call('DEL', message_id)
-                    return message
+                    return message_id, message
                 end"
                 , new RedisKey[] { queueKey });
 
-            return (RedisValue)result;
+            return (RedisValue[])result;
         }
 
-        public static RedisValue ScriptMoveMessageToRollbackQueue(this IDatabase db,  
-            RedisKey queueKey, RedisKey rollbackQueueKey, RedisKey transactionSetKe, RedisValue transactionId)
+        public static RedisValue[] ScriptReceiveMessageAndCopyToRollbackQueue(this IDatabase db,  
+            RedisKey queueKey, RedisKey rollbackQueueKey, RedisKey transactionSetKey, RedisValue transactionId)
         {
             RedisResult result = db.ScriptEvaluate(@"
                 -- get message id from the queue and move it to the rollback queue
@@ -60,11 +40,11 @@
                     -- get message from message id
                     local message = redis.call('GET', message_id)
                     redis.call('DEL', message_id)
-                    return message
+                    return message_id, message
                 end"
             , new RedisKey[] { queueKey, rollbackQueueKey, transactionSetKey }, new RedisValue[] { transactionId });
 
-            return (RedisValue)result;
+            return (RedisValue[])result;
         }
     }
 }

@@ -36,12 +36,12 @@
 
             {1}";
 
-		public static void UseRedis(this RebusTransportConfigurer configurer, string redisConnectionString, string inputQueue, string errorQueue)
+        public static void UseRedis(this RebusTransportConfigurer configurer, string redisConnectionString, string inputQueue, string errorQueue)
 		{
 			UseRedis(configurer, ConfigurationOptions.Parse(redisConnectionString), inputQueue, errorQueue);
 		}
 
-		public static void UseRedis(this RebusTransportConfigurer configurer, ConfigurationOptions options, string inputQueue, string errorQueue)
+        public static void UseRedis(this RebusTransportConfigurer configurer, ConfigurationOptions options, string inputQueue, string errorQueue)
 		{
 			if (string.IsNullOrEmpty(inputQueue))
 			{

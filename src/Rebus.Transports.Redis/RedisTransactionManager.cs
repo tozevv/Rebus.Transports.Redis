@@ -9,12 +9,14 @@
     {
         private const string TransactionCounterKey = "rebus:transaction:counter";
         private const string TransactionLockKey = "rebus:transaction:{0}";
+        private const string RedisContextKey = "redis:context";
 
         private readonly IDatabase db;
         private readonly Lazy<ITransaction> commitTx;
         private readonly Lazy<ITransaction> rollbackTx;
         private readonly ITransactionContext context;
         private readonly TimeSpan timeout;
+        private bool dirtyAbort = false;
      
         public RedisTransactionManager(ITransactionContext context, IDatabase db, TimeSpan timeout)
         {
@@ -32,12 +34,20 @@
      
             context.DoCommit += () =>
 			{
+                if (dirtyAbort)
+                {
+                    return;
+                }
                 this.CommitTx.KeyDeleteAsync(string.Format(TransactionLockKey, this.TransactionId));
                 this.CommitTx.Execute();
 			};
 
 			context.DoRollback += () =>
 			{
+                if (dirtyAbort)
+                {
+                    return;
+                }
                 this.RollbackTx.KeyDeleteAsync(string.Format(TransactionLockKey, this.TransactionId));
                 this.RollbackTx.Execute();
 			};
@@ -66,10 +76,41 @@
             }
         }
 
+        public void AbortWithNoRollback() 
+        {
+            this.dirtyAbort = true;
+        }
+
         public static bool IsTransactionActive(IDatabase database, long transactionId)
         {
             return database.KeyExists(string.Format(TransactionLockKey, transactionId));
         }
+       
+        public static RedisTransactionManager Get(ITransactionContext context)
+        {
+            // locking not needed here 
+            // assuming 1-to-1 relathionship between current worker and context
+            var redisTransaction = context[RedisContextKey] as RedisTransactionManager;
+            return redisTransaction;
+        }
+
+        public static RedisTransactionManager GetOrCreate(ITransactionContext context, IDatabase database, TimeSpan transactionTimeout)
+        {
+            // locking not needed here 
+            // assuming 1-to-1 relathionship between current worker and context
+            var redisTransaction = context[RedisContextKey] as RedisTransactionManager;
+            if (redisTransaction == null)
+            {
+                redisTransaction = new RedisTransactionManager(context, database, transactionTimeout);
+                if (context.IsTransactional)
+                {
+                    redisTransaction.BeginTransaction();
+                }
+                context[RedisContextKey] = redisTransaction;
+            }
+            return redisTransaction;
+        }
+
     }
 }
 

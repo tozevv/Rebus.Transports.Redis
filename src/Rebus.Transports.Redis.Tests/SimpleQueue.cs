@@ -1,4 +1,6 @@
-﻿namespace Rebus.Transports.Redis.Tests
+﻿using System.Runtime.Remoting.Messaging;
+
+namespace Rebus.Transports.Redis.Tests
 {
     using MsgPack.Serialization;
     using Rebus.Bus;
@@ -10,7 +12,7 @@
     {
         private readonly MessagePackSerializer<T> serializer;
         private readonly IDuplexTransport transport;
-       
+
         public SimpleQueue(IDuplexTransport transport)
         {
             this.serializer =  MessagePackSerializer.Get<T>();
@@ -24,8 +26,18 @@
                 return new NoTransaction();
             }
 
-            var trans = new Rebus.Bus.AmbientTransactionContext();
+            // store ambient transaction in logical data context
+            AmbientTransactionContext trans = CallContext.LogicalGetData("ambientTrans")
+                as AmbientTransactionContext;
 
+            if (trans == null)
+            {
+                trans = new AmbientTransactionContext();
+                CallContext.LogicalSetData("ambientTrans", trans);
+                Transaction.Current.TransactionCompleted += (o, e) => {
+                    CallContext.LogicalSetData("ambientTrans", null);
+                };
+            }
             return trans;
         }
 
