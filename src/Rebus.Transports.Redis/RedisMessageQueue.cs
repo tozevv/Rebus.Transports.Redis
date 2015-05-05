@@ -209,24 +209,31 @@
        
         private void CleanupRollbacks()
         {
+            Console.WriteLine("CLEANUP START");
             IDatabase db = this.redis.GetDatabase();
             RedisKey transactionSetKey = string.Format(TransactionSetKeyFormat, this.inputQueueName);
 
             RedisKey queueKey = string.Format(QueueKeyFormat, this.inputQueueName);
             var transactionIds = db.SetMembers(transactionSetKey).Select(t => (long)t);
-
+            Console.WriteLine("transactionIds:" + string.Join(",", transactionIds.Select(t => t.ToString())));
             foreach (var transactionId in transactionIds)
             {
                 if (!RedisTransactionManager.IsTransactionActive(db, transactionId))
                 {
+
                     RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, transactionId);
                     while (db.ListRightPopLeftPush(rollbackQueueKey, queueKey, CommandFlags.PreferMaster) != RedisValue.Null)
                     {
 
                     }
                 }
+                else
+                {
+                    Console.WriteLine("transaction still active:" + transactionId);
+                }
                 db.SetRemove(TransactionSetKeyFormat, new RedisValue[] { transactionId });
             }
+            Console.WriteLine("CLEANUP END");
         }
     }
 }

@@ -41,7 +41,7 @@
 
             // Act
             queue.Send(message, expireIn);
-            Thread.Sleep((int)expireIn.TotalMilliseconds);
+            Thread.Sleep((int)expireIn.TotalMilliseconds + 100);
             string receivedMessage = queue.Receive();
 
             // Assert

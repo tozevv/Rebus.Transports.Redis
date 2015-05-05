@@ -45,7 +45,7 @@
                 txManager.AbortWithNoRollback();
 
                 // more than timeout
-                Thread.Sleep(transactionTimeout);
+                Thread.Sleep(transactionTimeout.Add(TimeSpan.FromSeconds(1)));
            
                 transactionScope.Dispose();
             }
