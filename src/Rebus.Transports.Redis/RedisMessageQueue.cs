@@ -1,10 +1,10 @@
 ﻿namespace Rebus.Transports.Redis
 {
-    using MsgPack.Serialization;
-    using StackExchange.Redis;
     using System;
     using System.IO;
     using System.Linq;
+    using MsgPack.Serialization;
+    using StackExchange.Redis;
 
     /// <summary>
     /// Implementation of a DuplexTransport using Redis List with push / pop operations.

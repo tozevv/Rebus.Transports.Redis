@@ -1,9 +1,9 @@
 ﻿namespace Rebus.Transports.Redis.Tests
 {
-    using NUnit.Framework;
-    using Rebus.Transports.Msmq;
     using System;
     using System.Messaging;
+    using NUnit.Framework;
+    using Rebus.Transports.Msmq;
 
     [TestFixture(typeof(MsmqMessageQueue))]
     public class MsmqTransportTests : TransportTestsBase<MsmqMessageQueue>

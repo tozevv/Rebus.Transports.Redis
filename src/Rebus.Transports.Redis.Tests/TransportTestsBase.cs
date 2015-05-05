@@ -1,15 +1,15 @@
 ﻿namespace Rebus.Transports.Redis.Tests
 {
-    using NUnit.Framework;
-    using Rebus.Transports.Msmq;
-    using Rebus.Transports.Redis;
-    using StackExchange.Redis;
     using System;
     using System.Collections.Generic;
     using System.Configuration;
     using System.Runtime.CompilerServices;
     using System.Threading;
     using System.Transactions;
+    using NUnit.Framework;
+    using Rebus.Transports.Msmq;
+    using Rebus.Transports.Redis;
+    using StackExchange.Redis;
 
 	/// <summary>
 	/// Unit tests for Rebus queues / transports

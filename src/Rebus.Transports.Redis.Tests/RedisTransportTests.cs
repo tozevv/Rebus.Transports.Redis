@@ -1,27 +1,27 @@
-﻿using System.Transactions;
-using System.Threading;
-
-namespace Rebus.Transports.Redis.Tests
+﻿namespace Rebus.Transports.Redis.Tests
 {
+    using System;
+    using System.Configuration;
+    using System.Threading;
+    using System.Transactions;
     using NUnit.Framework;
     using Rebus.Transports.Redis;
     using StackExchange.Redis;
-    using System;
-    using System.Configuration;
     
     [TestFixture(typeof(RedisMessageQueue))]
     public class RedisTransportTests: TransportTestsBase<RedisMessageQueue>
     {
-        public RedisTransportTests(Type t) : base() { }
+        private TimeSpan transactionTimeout = TimeSpan.FromSeconds(1);
 
+        public RedisTransportTests(Type t) : base() { }
+ 
         protected override IDuplexTransport GetTransport(string queueName)
         {
             string connectionString = ConfigurationManager.ConnectionStrings["RebusUnitTest"].ConnectionString;
             var redisConfiguration = ConfigurationOptions.Parse(connectionString);
             redisConfiguration.ResolveDns = true;
-            return new RedisMessageQueue(redisConfiguration, queueName) as IDuplexTransport;
+            return new RedisMessageQueue(redisConfiguration, queueName, transactionTimeout) as IDuplexTransport;
         }
-
 
         [Test]
         public void WhenDirtyAborting_ThenMessageIsKept()
@@ -45,11 +45,10 @@ namespace Rebus.Transports.Redis.Tests
                 txManager.AbortWithNoRollback();
 
                 // more than timeout
-                Thread.Sleep(10000);
-
+                Thread.Sleep(transactionTimeout);
+           
                 transactionScope.Dispose();
             }
-
 
             receivedAfterRollback = queue.Receive();
 

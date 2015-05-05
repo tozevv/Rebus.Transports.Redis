@@ -1,12 +1,11 @@
-﻿using System.Runtime.Remoting.Messaging;
-
-namespace Rebus.Transports.Redis.Tests
+﻿namespace Rebus.Transports.Redis.Tests
 {
-    using MsgPack.Serialization;
-    using Rebus.Bus;
     using System;
     using System.Collections.Generic;
+    using System.Runtime.Remoting.Messaging;
     using System.Transactions;
+    using MsgPack.Serialization;
+    using Rebus.Bus;
 
     public class SimpleQueue<T>  where T:class
     {
