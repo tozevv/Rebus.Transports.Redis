@@ -34,6 +34,7 @@
 
             // Act
             queue.Send(message);
+            Console.WriteLine("WhenDirtyAborting_ThenMessageIsKept");
 
             using (var transactionScope = new TransactionScope())
             {
