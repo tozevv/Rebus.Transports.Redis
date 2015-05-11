@@ -76,13 +76,13 @@
         {
             IDatabase db = this.redis.GetDatabase();
 
+            // purge rollback log from previous calls
+            CleanupRollbacks();
+
             if (context.IsTransactional)
             {
                 var txManager = RedisTransactionManager.GetOrCreate(context, db, transactionTimeout);
 
-                // purge rollback log from previous calls
-                CleanupRollbacks();
-               
                 RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, txManager.TransactionId);
                 RedisKey transactionSetKey = string.Format(TransactionSetKeyFormat, this.inputQueueName);
 

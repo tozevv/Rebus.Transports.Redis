@@ -14,7 +14,6 @@
         private TimeSpan transactionTimeout = TimeSpan.FromSeconds(1);
         public RedisTransportTests(Type t) : base() { }
  
-            
         [Test]
         public void WhenDirtyAborting_ThenMessageIsKept()
         {
@@ -31,14 +30,11 @@
             using (var transactionScope = new TransactionScope())
             {
                 receivedBeforeRollback = queue.Receive();
-                DumpRedisKeys();
 
                 // force a dirty rollback, eg, without rolling back.
                 var transactionContext = queue.GetCurrentTransactionContext();
                 var txManager = RedisTransactionManager.Get(transactionContext);
                 txManager.AbortWithNoRollback();
-
-                DumpRedisKeys();
 
                 // more than timeout
                 Thread.Sleep(transactionTimeout.Add(TimeSpan.FromSeconds(2)));
@@ -69,6 +65,7 @@
 
         private void DumpRedisKeys()
         {
+            Console.WriteLine("----- Redis keys ----");
             var redis =  ConnectionMultiplexer.Connect(GetRedisConfig());
             foreach (var key in redis.GetServer(redis.GetEndPoints()[0]).Keys())
             {
