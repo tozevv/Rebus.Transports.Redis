@@ -16,6 +16,7 @@
 	/// </summary>
     public abstract class TransportTestsBase<T> where T:IDuplexTransport
     {
+        /*
 		[Test]
 		public void WhenSendingMessage_ThenMessageIsDelivered()
 		{
@@ -238,6 +239,7 @@
             Assert.AreEqual(secondMessage, received2);
             Assert.AreEqual(firstMessage, received3);
         }
+        */
 
         protected virtual SimpleQueue<string> GetQueueForTest([CallerMemberName] string caller = "")
         {
