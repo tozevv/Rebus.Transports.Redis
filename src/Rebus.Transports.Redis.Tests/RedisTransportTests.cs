@@ -12,8 +12,19 @@
     public class RedisTransportTests: TransportTestsBase<RedisMessageQueue>
     {
         private TimeSpan transactionTimeout = TimeSpan.FromSeconds(1);
+
         public RedisTransportTests(Type t) : base() { }
  
+        [TestFixtureSetUp]
+        public void FixtureSetUp()
+        {
+            var redisConfig = GetRedisConfig();
+            redisConfig.AllowAdmin = true;
+            var redis = ConnectionMultiplexer.Connect(redisConfig);
+            var server = redis.GetServer(redis.GetEndPoints()[0]);
+            server.FlushDatabase(); 
+        }
+
         [Test]
         public void WhenDirtyAborting_ThenMessageIsKept()
         {
@@ -25,8 +36,7 @@
 
             // Act
             queue.Send(message);
-            Console.WriteLine("WhenDirtyAborting_ThenMessageIsKept");
-
+         
             using (var transactionScope = new TransactionScope())
             {
                 receivedBeforeRollback = queue.Receive();
@@ -41,8 +51,7 @@
            
                 transactionScope.Dispose();
             }
-            DumpRedisKeys();
-
+          
             receivedAfterRollback = queue.Receive();
 
             // Assert
@@ -61,16 +70,6 @@
             var redisConfiguration = ConfigurationOptions.Parse(connectionString);
             redisConfiguration.ResolveDns = true;
             return redisConfiguration;
-        }
-
-        private void DumpRedisKeys()
-        {
-            Console.WriteLine("----- Redis keys ----");
-            var redis =  ConnectionMultiplexer.Connect(GetRedisConfig());
-            foreach (var key in redis.GetServer(redis.GetEndPoints()[0]).Keys())
-            {
-                Console.WriteLine("Redis key: " + key);
-            }
         }
     }
 }
