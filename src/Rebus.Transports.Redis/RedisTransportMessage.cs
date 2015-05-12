@@ -8,12 +8,11 @@
 	/// </summary>
 	[Serializable]
 	public class RedisTransportMessage
-
 	{
-        public RedisTransportMessage()
-        {
-        }
-
+        /// <summary>
+        /// Creates a new RedisTransportMessage from a Rebus TransportMessageToSend
+        /// </summary>
+        /// <param name="send">Outbound transport message.</param>
         public RedisTransportMessage(TransportMessageToSend send)
         {
             Body = send.Body;
@@ -26,7 +25,12 @@
 		public IDictionary<string, object> Headers { get; set; }
 
 		public string Label { get; set; }
-        
+
+        /// <summary>
+        /// Convert a RedisTransportMesssage to a received transport message.
+        /// </summary>
+        /// <returns>Inbound transport message.</returns>
+        /// <param name="id">Id of the received message.</param>
         public ReceivedTransportMessage ToReceivedTransportMessage(string id)
         {
             return new ReceivedTransportMessage()
