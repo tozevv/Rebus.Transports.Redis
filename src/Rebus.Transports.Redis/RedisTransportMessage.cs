@@ -1,4 +1,4 @@
-﻿namespace Rebus.Transports.Redis
+namespace Rebus.Transports.Redis
 {
 	using System;
 	using System.Collections.Generic;
@@ -10,7 +10,11 @@
 	public class RedisTransportMessage
 	{
         /// <summary>
+<<<<<<< Upstream, based on origin/lua
         /// Default constructor for serialization
+=======
+        /// Default construct
+>>>>>>> 95c583d Added missing default constructor.
         /// </summary>
         public RedisTransportMessage()
         {
