@@ -10,6 +10,13 @@
 	public class RedisTransportMessage
 	{
         /// <summary>
+        /// Default constructor for serialization
+        /// </summary>
+        public RedisTransportMessage()
+        {
+        }
+
+        /// <summary>
         /// Creates a new RedisTransportMessage from a Rebus TransportMessageToSend
         /// </summary>
         /// <param name="send">Outbound transport message.</param>
