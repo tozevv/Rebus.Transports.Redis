@@ -13,9 +13,7 @@
     public class RedisMessageQueue : IDuplexTransport, IDisposable
     {
         private const string QueueKeyFormat = "rebus:queue:{0}";
-        private const string RollbackQueueKeyFormat = "rebus:queue:{0}:rollback:{1}";
-        private const string TransactionSetKeyFormat = "rebus:queue:{0}:transactions";
-      
+       
         private readonly ConnectionMultiplexer redis;
         private readonly MessagePackSerializer<RedisTransportMessage> serializer;
         private readonly string inputQueueName;
@@ -58,79 +56,19 @@
 
         public void Send(string destinationQueueName, TransportMessageToSend message, ITransactionContext context)
         {
-            IDatabase db = this.redis.GetDatabase();
             RedisKey destinationQueueKey = string.Format(QueueKeyFormat, destinationQueueName);
            
-            if (context.IsTransactional)
-            {
-                var tx = RedisTransactionManager.GetOrCreate(context, db, transactionTimeout).CommitTx;
-                InternalSend(tx, destinationQueueKey, message);
-            }
-            else
-            {
-                InternalSend(db, destinationQueueKey, message);
-            }
-        }
-
-        public ReceivedTransportMessage ReceiveMessage(ITransactionContext context)
-        {
-            IDatabase db = this.redis.GetDatabase();
-
-            // purge rollback log from previous calls
-            CleanupRollbacks();
-
-            if (context.IsTransactional)
-            {
-                var txManager = RedisTransactionManager.GetOrCreate(context, db, transactionTimeout);
-
-                RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, txManager.TransactionId);
-                RedisKey transactionSetKey = string.Format(TransactionSetKeyFormat, this.inputQueueName);
-
-                var message = InternalReceiveMessageInTransaction(db, this.inputQueueKey, 
-                                                                 rollbackQueueKey, transactionSetKey, 
-                                                                 txManager.TransactionId);
-
-                if (message == null) 
-                {
-                    return null;
-                }
-
-                // ok, a message was read and the transaction commited
-                // prepare the key for deletion in the single transaction commit
-
-                txManager.CommitTx.KeyDeleteAsync(message.Id);
-                txManager.CommitTx.ListRightPopAsync(rollbackQueueKey);
-
-                // atomically prepare rollback, moving the message id back to the queue
-                txManager.RollbackTx.ListRightPopLeftPushAsync(rollbackQueueKey, this.inputQueueKey, CommandFlags.PreferMaster);
-
-                return message;
-            }
-            else
-            {
-                // no transaction here, just retrieve the key id from que Redis list
-                return InternalReceiveMessage(db, this.inputQueueKey);
-            }
-        } 
-
-        public void Dispose()
-        {
-            if (this.redis != null)
-            {
-                this.redis.Dispose();
-            }
-        }
-
-        private void InternalSend(IDatabaseAsync db, string destinationQueueKey, TransportMessageToSend message)
-        {
             var redisMessage = new RedisTransportMessage(message);
-            var expiry = redisMessage.GetMessageExpiration();
             RedisValue serializedMessage = this.serializer.PackSingleObject(redisMessage);
 
             // redis expiration needs to be on the nearest "second"
+            var expiry = redisMessage.GetMessageExpiration();
             long expirationInSeconds = Convert.ToInt64(expiry.HasValue ? expiry.Value.TotalSeconds : 0);
 
-            db.ScriptEvaluateAsync(@"
+
+            IDatabase db = this.redis.GetDatabase();
+
+            string script = @"
                 -- increment sequential message id
                 local message_id = redis.call('INCR', 'rebus:message:counter')
 
@@ -142,50 +80,109 @@
                 end
 
                 -- push message id to queue
-                redis.call('LPUSH', KEYS[1], message_id)"
-                    , new RedisKey[] { destinationQueueKey }, 
-                new RedisValue[] { serializedMessage, expirationInSeconds });            
+                redis.call('LPUSH', KEYS[1], message_id)";
+                
+            if (context.IsTransactional)
+            {
+                GetTransaction(context).ScriptEvaluateAsync(script, 
+                    new RedisKey[] { destinationQueueKey }, 
+                    new RedisValue[] { serializedMessage, expirationInSeconds });
+            }
+            else
+            {
+                db.ScriptEvaluateAsync(script, 
+                    new RedisKey[] { destinationQueueKey }, 
+                    new RedisValue[] { serializedMessage, expirationInSeconds });
+            }
         }
 
-        private ReceivedTransportMessage InternalReceiveMessage(IDatabase db, RedisKey queueKey)
+        public ReceivedTransportMessage ReceiveMessage(ITransactionContext context)
         {
-            RedisResult result = db.ScriptEvaluate(@"
-                -- get message id from the queue
-                local message_id = redis.call('RPOP', KEYS[1])
-                if (message_id == false) then
-                    return false
-                else
-                    -- get message from message id
-                    local message = redis.call('GET', message_id)
-                    redis.call('DEL', message_id)
-                    return { message_id, message } 
-                end"
-            , new RedisKey[] { queueKey });
+            if (context.IsTransactional)
+            {
+                RedisCompensatingTransaction transaction = GetTransaction(context);
 
-            return ParseMessage(result);
+                RedisResult result = transaction.ScriptEvaluateWithCompensation(
+                    @"
+                    -- get message id from the queue and move it to the rollback queue
+                    local message_id = redis.call('RPOP', KEYS[1])
+
+                    if (message_id == false) then
+                        return false
+                    else
+                        compensate(KEYS[2], 'LPUSH', KEYS[1], message_id)
+
+                        local message = redis.call('GET', message_id)
+                        
+                        local expires = redis.call('TTL', message_id) 
+                        redis.call('DEL', message_id)
+                        
+                        compensate(KEYS[2], 'SET', message_id, message)
+                        compensate(KEYS[2], 'EXPIRE', message_id, expires)
+
+                        return { message_id, message }
+                    end"
+                , new RedisKey[] { this.inputQueueKey });
+
+                return ParseMessage(result);
+            }
+            else
+            {
+                IDatabase db = this.redis.GetDatabase();
+
+                // no transaction here, just retrieve the key id from que Redis list
+                RedisResult result = db.ScriptEvaluate(@"
+                    -- get message id from the queue
+                    local message_id = redis.call('RPOP', KEYS[1])
+                    if (message_id == false) then
+                        return false
+                    else
+                        -- get message from message id
+                        local message = redis.call('GET', message_id)
+                        redis.call('DEL', message_id)
+                        return { message_id, message } 
+                    end"
+                , new RedisKey[] { this.inputQueueKey });
+
+                return ParseMessage(result);
+            }
+        } 
+
+        public void Dispose()
+        {
+            if (this.redis != null)
+            {
+                this.redis.Dispose();
+            }
         }
-
-        private ReceivedTransportMessage InternalReceiveMessageInTransaction(IDatabase db, RedisKey queueKey,
-                                                                             RedisKey rollbackQueueKey, RedisKey transactionSetKey, RedisValue transactionId)
+          
+        private RedisCompensatingTransaction GetTransaction(ITransactionContext context) 
         {
-            RedisResult result = db.ScriptEvaluate(@"
-                -- get message id from the queue and move it to the rollback queue
-                local message_id = redis.call('RPOPLPUSH', KEYS[1], KEYS[2])
-                if (message_id == false) then
-                    return false
-                else
-                    -- add newly create rollback queue to set of rollback queues
-                    redis.call('SADD', KEYS[3], ARGV[1])
+            const string RedisContextKey = "redis:context";
 
-                    -- get message from message id
-                    local message = redis.call('GET', message_id)
+            if (! context.IsTransactional)
+            {
+                return null;
+            }
 
-                    -- delete message is done only on transaction commit
-                    return { message_id, message }
-                end"
-            , new RedisKey[] { queueKey, rollbackQueueKey, transactionSetKey }, new RedisValue[] { transactionId });
+            // locking not needed here 
+            // assuming 1-to-1 relathionship between current worker and context
+            var redisTransaction = context[RedisContextKey] as RedisCompensatingTransaction;
+            if (redisTransaction == null)
+            {
+                var db = this.redis.GetDatabase();
+                redisTransaction = db.BeginCompensatingTransaction(this.transactionTimeout);
 
-            return ParseMessage(result);
+                context.DoCommit += () => {
+                    redisTransaction.Commit();
+                };
+                context.DoRollback += () => {
+                    redisTransaction.Rollback();
+                };
+                context[RedisContextKey] = redisTransaction;
+            }
+            return redisTransaction;
+
         }
 
         private ReceivedTransportMessage ParseMessage(RedisResult result) 
@@ -207,7 +204,7 @@
                 .ToReceivedTransportMessage(messageId);
         }
        
-        private void CleanupRollbacks()
+      /*  private void CleanupRollbacks()
         {
             IDatabase db = this.redis.GetDatabase();
             RedisKey transactionSetKey = string.Format(TransactionSetKeyFormat, this.inputQueueName);
@@ -228,6 +225,6 @@
                 }
                 db.SetRemove(TransactionSetKeyFormat, new RedisValue[] { transactionId });
             }
-        }
+        }*/
     }
 }

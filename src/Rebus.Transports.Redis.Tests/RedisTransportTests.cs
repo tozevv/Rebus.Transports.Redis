@@ -42,9 +42,9 @@
                 receivedBeforeRollback = queue.Receive();
 
                 // force a dirty rollback, eg, without rolling back.
-                var transactionContext = queue.GetCurrentTransactionContext();
-                var txManager = RedisTransactionManager.Get(transactionContext);
-                txManager.AbortWithNoRollback();
+                //var transactionContext = queue.GetCurrentTransactionContext();
+                //var txManager = RedisTransactionManager.Get(transactionContext);
+                //txManager.AbortWithNoRollback();
 
                 // more than timeout
                 Thread.Sleep(transactionTimeout.Add(TimeSpan.FromSeconds(2)));

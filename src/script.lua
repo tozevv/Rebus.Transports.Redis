@@ -1,5 +1,4 @@
 local bytestonumber = function(str)
-
   local function _b2n(num, digit, ...)
     if not digit then return num end
     return _b2n(num*256 + digit, ...)
@@ -54,11 +53,12 @@ local runcompensation = function(transactionKey)
 	end
 end
 
-logcompensation('tx', 'EXPIRE', 'Keyname', '5')
-logcompensation('tx', 'SET', 'Keyname', '123')
-logcompensation('tx', 'SET', 'AnotherKeyname', 'Works')
-logcompensation('tx', 'SET', 'Keyname', '456')
-runcompensation('tx')
+logcompensation(KEYS[1], 'EXPIRE', 'Keyname', '5')
+logcompensation(KEYS[1], 'SET', 'Keyname', '123')
+logcompensation(KEYS[1], 'SET', 'AnotherKeyname', 'Works')
+logcompensation(KEYS[1], 'SET', 'Keyname', '456')
+runcompensation(KEYS[1])
+
 
 
 
