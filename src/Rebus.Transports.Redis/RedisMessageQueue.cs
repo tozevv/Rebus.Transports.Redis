@@ -110,15 +110,14 @@
                     if (message_id == false) then
                         return false
                     else
-                        compensate(KEYS[2], 'LPUSH', KEYS[1], message_id)
-
+                       
                         local message = redis.call('GET', message_id)
-                        
                         local expires = redis.call('TTL', message_id) 
                         redis.call('DEL', message_id)
-                        
-                        compensate(KEYS[2], 'SET', message_id, message)
-                        compensate(KEYS[2], 'EXPIRE', message_id, expires)
+                      
+                        compensate('EXPIRE', message_id, expires)
+                        compensate('SET', message_id, message)
+                        compensate('LPUSH', KEYS[1], message_id)
 
                         return { message_id, message }
                     end"

@@ -64,6 +64,7 @@
         }
 
         [Test]
+        [Category("Transaction")]
         public void WhenSendingMessagesInTransaction_ThenMessageIsDeliveredWithCommit()
         {
             // Arrange
@@ -88,6 +89,7 @@
         }
 
         [Test]
+        [Category("Transaction")]
         public void WhenRollingbackSend_ThenMessageIsDiscarded()
         {
             // Arrange
@@ -108,6 +110,7 @@
         }
         
         [Test]
+        [Category("Transaction")]
         public void WhenRollingbackReceive_ThenMessageIsKept()
         {
              // Arrange
@@ -133,6 +136,7 @@
         }
 
         [Test]
+        [Category("Transaction")]
         public void WhenRollingbackReceive_ThenMessageOrderIsKept()
         {
             // Arrange
@@ -158,6 +162,7 @@
         }
 
         [Test]
+        [Category("Transaction")]
         public void WhenRollingbackReceiveAndSend_ThenMessageIsDiscarded()
         {
             // Arrange
@@ -184,6 +189,7 @@
         }
 
         [Test]
+        [Category("Transaction")]
         public void WhenReceivingFromTwoConsumersAndRollingbackFirst_ThenSecondConsumerReceivesOutOfOrder()
         {
             // Arrange

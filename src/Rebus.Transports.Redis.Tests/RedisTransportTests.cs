@@ -15,17 +15,8 @@
 
         public RedisTransportTests(Type t) : base() { }
  
-        [TestFixtureSetUp]
-        public void FixtureSetUp()
-        {
-            var redisConfig = GetRedisConfig();
-            redisConfig.AllowAdmin = true;
-            var redis = ConnectionMultiplexer.Connect(redisConfig);
-            var server = redis.GetServer(redis.GetEndPoints()[0]);
-            server.FlushDatabase(); 
-        }
-
         [Test]
+        [Category("Transaction")]
         public void WhenDirtyAborting_ThenMessageIsKept()
         {
             // Arrange

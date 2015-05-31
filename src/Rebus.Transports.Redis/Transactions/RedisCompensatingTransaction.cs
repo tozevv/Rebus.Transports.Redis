@@ -24,11 +24,11 @@ namespace Rebus.Transports.Redis
             this.transactionKey = new Lazy<string>(() =>
                 {
                     return (string)db.ScriptEvaluate(@"
-                        local transactionId = redis.call('INC', 'transaction:counter')
-                        local key = 'transaction' .. transactionId
+                        local transactionId = redis.call('INCR', 'transaction:counter')
+                        local key = 'transaction' .. ':' .. transactionId
 
-                        --redis.call('SET', key, transactionId)
-                        --redis.call('EXPIRE', key, ARGV[1]) 
+                        redis.call('SET', key, transactionId)
+                        redis.call('EXPIRE', key, ARGV[1]) 
                         return key
                         ", null, new RedisValue[] { timeoutInSeconds });
                 });
@@ -61,9 +61,9 @@ namespace Rebus.Transports.Redis
                     return result
                 end
 
-                local compensate = function(KEYS[{0}], ...)
+                local compensate = function(...)
                     local strcmd = commandtostring(...)
-                    redis.call('LPUSH', KEYS[{0}], strcmd)
+                    redis.call('LPUSH', KEYS[KEYPOS], strcmd)
                 end";
 
             if (keys == null)
@@ -71,9 +71,12 @@ namespace Rebus.Transports.Redis
                 keys = new RedisKey[] {};
             }
 
-            string combinedScript = string.Format(CompensateScript, keys.Length) + script;
+            // Use replace instead of string.Format to prevent escaping Luas {} curly braces 
+            string combinedScript = CompensateScript.Replace("KEYPOS", (keys.Length + 1).ToString())
+                                    + script;
+     
 
-            RedisKey[] combinedKeys = keys.Concat(new RedisKey[] { this.transactionKey.Value }).ToArray();
+            RedisKey[] combinedKeys = keys.Concat(new RedisKey[] { TransactionLogKey }).ToArray();
            
             return this.db.ScriptEvaluate(combinedScript, combinedKeys, values, flags);
         }
@@ -81,6 +84,7 @@ namespace Rebus.Transports.Redis
         public void Commit()
         {
             this.commitTransaction.Value.KeyDeleteAsync(this.transactionKey.Value);
+            this.commitTransaction.Value.KeyDeleteAsync(TransactionLogKey);
             this.commitTransaction.Value.Execute(CommandFlags.PreferMaster);
         }
 
@@ -89,8 +93,14 @@ namespace Rebus.Transports.Redis
             Rollback(this.transactionKey.Value);    
         }
 
-        private void Rollback(string transactionKey)
+        private string TransactionLogKey
         {
+            get {
+                return this.transactionKey.Value + ":log";
+            }
+        }
+        private void Rollback(string transactionKey)
+        { 
             this.db.ScriptEvaluate(@"
                 local bytestonumber = function(str)
                   local function _b2n(num, digit, ...)
@@ -113,13 +123,17 @@ namespace Rebus.Transports.Redis
                 end
 
                 while (true) do
-                    local strcmd = redis.call('LPOP', KEYS[1])
+
+                    local strcmd = redis.call('RPOP', KEYS[1])
+                    redis.log(redis.LOG_WARNING, strcmd)
+
                     if (strcmd == false) then
                         return
                     end
                     local cmd = stringtocommand(strcmd)
+                    redis.log(redis.LOG_WARNING, cmd)
                     redis.call(unpack(cmd))
-                end", new RedisKey[] { this.transactionKey.Value });
+                end", new RedisKey[] { TransactionLogKey });
         }
     }
 }
