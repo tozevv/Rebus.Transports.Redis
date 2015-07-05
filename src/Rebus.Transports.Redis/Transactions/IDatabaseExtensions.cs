@@ -5,10 +5,9 @@ namespace Rebus.Transports.Redis
 {
     public static class IDatabaseExtensions
     {
-        public static RedisCompensatingTransaction BeginCompensatingTransaction(this IDatabase database, TimeSpan? expiration = null)
+        public static RedisCompensatingTransaction BeginCompensatingTransaction(this IDatabase database)
         {
-            expiration = expiration.HasValue ? expiration : TimeSpan.FromSeconds(30);
-            return new RedisCompensatingTransaction(database, expiration.Value);
+            return new RedisCompensatingTransaction(database);
         }
     }
 }

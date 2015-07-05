@@ -43,11 +43,9 @@
         /// <param name="redisConnectionString">Redis connection string.</param>
         /// <param name="inputQueue">Input queue name.</param>
         /// <param name="errorQueue">Error queue name.</param>
-        /// <param name="transactionTimeout">Optional transaction timeout for redis. Default is 30s.</param>
-        public static void UseRedis(this RebusTransportConfigurer configurer, string redisConnectionString, string inputQueue, string errorQueue, 
-            TimeSpan? transactionTimeout = null)
+        public static void UseRedis(this RebusTransportConfigurer configurer, string redisConnectionString, string inputQueue, string errorQueue)
 		{
-            UseRedis(configurer, ConfigurationOptions.Parse(redisConnectionString), inputQueue, errorQueue, transactionTimeout);
+            UseRedis(configurer, ConfigurationOptions.Parse(redisConnectionString), inputQueue, errorQueue);
 		}
 
         /// <summary>
@@ -57,16 +55,14 @@
         /// <param name="options">Redis connection options.</param>
         /// <param name="inputQueue">Input queue name.</param>
         /// <param name="errorQueue">Error queue name.</param>
-        /// <param name="transactionTimeout">Optional transaction timeout for redis. Default is 30s.</param>
-        public static void UseRedis(this RebusTransportConfigurer configurer, ConfigurationOptions redisConnection, string inputQueue, string errorQueue,
-            TimeSpan? transactionTimeout = null)
+        public static void UseRedis(this RebusTransportConfigurer configurer, ConfigurationOptions redisConnection, string inputQueue, string errorQueue)
 		{
 			if (string.IsNullOrEmpty(inputQueue))
 			{
 				throw new ConfigurationException("You need to specify an input queue.");
 			}
-            transactionTimeout = transactionTimeout ?? TimeSpan.FromSeconds(30);
-            var redisMessageQueue = new RedisMessageQueue(redisConnection, inputQueue, transactionTimeout);
+           
+            var redisMessageQueue = new RedisMessageQueue(redisConnection, inputQueue);
 
 			configurer.UseSender(redisMessageQueue);
 			configurer.UseReceiver(redisMessageQueue);
@@ -78,9 +74,7 @@
         /// </summary>
         /// <param name="configurer">Configurer.</param>
         /// <param name="redisConnectionString">Redis connection string.</param>
-        /// <param name="transactionTimeout">Optional transaction timeout for redis. Default is 30s.</param>
-        public static void UseRedisAndGetInputQueueNameFromAppConfig(this RebusTransportConfigurer configurer, 
-            string redisConnectionString, TimeSpan? transactionTimeout = null)
+        public static void UseRedisAndGetInputQueueNameFromAppConfig(this RebusTransportConfigurer configurer, string redisConnectionString)
 		{
 			try
 			{
@@ -91,7 +85,7 @@
 				var inputQueueName = section.InputQueue;
 				var errorQueueName = section.ErrorQueue;
 
-                UseRedis(configurer, redisConnectionString, inputQueueName, errorQueueName, transactionTimeout);
+                UseRedis(configurer, redisConnectionString, inputQueueName, errorQueueName);
 			}
 			catch (RedisConnectionException)
 			{

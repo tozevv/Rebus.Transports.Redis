@@ -14,7 +14,7 @@ namespace Rebus.Transports.Redis
         private readonly Lazy<string> transactionLog = null;
         private readonly IDatabase db;
 
-        internal RedisCompensatingTransaction(IDatabase database, TimeSpan transactionTimeout)
+        internal RedisCompensatingTransaction(IDatabase database)
         {
             this.db = database;
 

@@ -52,7 +52,7 @@
 
         protected override IDuplexTransport GetTransport(string queueName)
         {
-            return new RedisMessageQueue(GetRedisConfig(), queueName, transactionTimeout) as IDuplexTransport;
+            return new RedisMessageQueue(GetRedisConfig(), queueName) as IDuplexTransport;
         }
 
         private ConfigurationOptions GetRedisConfig()

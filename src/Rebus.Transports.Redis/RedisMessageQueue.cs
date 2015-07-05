@@ -18,15 +18,13 @@
         private readonly MessagePackSerializer<RedisTransportMessage> serializer;
         private readonly string inputQueueName;
         private readonly string inputQueueKey;
-        private readonly TimeSpan transactionTimeout;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RedisMessageQueue" /> class.
         /// </summary>
         /// <param name="configOptions">Redis connection configuration options.</param>
         /// <param name="inputQueueName">Name of the input queue.</param>
-        /// <param name="transactionTimeout">Transaction timeout to use if transactions enable.</param>
-        public RedisMessageQueue(ConfigurationOptions configOptions, string inputQueueName, TimeSpan? transactionTimeout = null)
+        public RedisMessageQueue(ConfigurationOptions configOptions, string inputQueueName)
         {
             var tw = new StringWriter();
             try
@@ -41,7 +39,6 @@
             this.serializer = MessagePackSerializer.Get<RedisTransportMessage>();
             this.inputQueueName = inputQueueName;
             this.inputQueueKey = string.Format(QueueKeyFormat, this.inputQueueName);
-            this.transactionTimeout = transactionTimeout ?? TimeSpan.FromSeconds(30);
         }
 
         public string InputQueue
@@ -170,7 +167,7 @@
             if (redisTransaction == null)
             {
                 var db = this.redis.GetDatabase();
-                redisTransaction = db.BeginCompensatingTransaction(this.transactionTimeout);
+                redisTransaction = db.BeginCompensatingTransaction();
 
                 context.DoCommit += () => {
                     redisTransaction.Commit();
