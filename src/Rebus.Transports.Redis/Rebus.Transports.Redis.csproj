@@ -55,8 +55,9 @@
     <Compile Include="RedisMessageQueue.cs" />
     <Compile Include="RedisMessageQueueConfigurationExtension.cs" />
     <Compile Include="RedisTransportMessage.cs" />
-    <Compile Include="Transactions\RedisCompensatingTransaction.cs" />
     <Compile Include="Transactions\IDatabaseExtensions.cs" />
+    <Compile Include="Transactions\CompensatingTransactionManager.cs" />
+    <Compile Include="Transactions\CompensatingTransaction.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

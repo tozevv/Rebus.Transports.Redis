@@ -5,9 +5,16 @@ namespace Rebus.Transports.Redis
 {
     public static class IDatabaseExtensions
     {
-        public static RedisCompensatingTransaction BeginCompensatingTransaction(this IDatabase database)
+        public static CompensatingTransaction BeginCompensatingTransaction(this IDatabase database)
         {
-            return new RedisCompensatingTransaction(database);
+            CompensatingTransactionManager manager = new CompensatingTransactionManager(database);
+            return manager.BeginTransaction();
+        }
+
+        public static void RollbackTimeoutCompensatingTransactions(this IDatabase database) 
+        {
+            CompensatingTransactionManager manager = new CompensatingTransactionManager(database);
+            manager.RollbackTimeoutTransactions();
         }
     }
 }

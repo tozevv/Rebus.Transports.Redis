@@ -97,7 +97,7 @@
         {
             if (context.IsTransactional)
             {
-                RedisCompensatingTransaction transaction = GetTransaction(context);
+                CompensatingTransaction transaction = GetTransaction(context);
 
                 RedisResult result = transaction.ScriptEvaluate(
                     @"
@@ -152,7 +152,7 @@
             }
         }
           
-        private RedisCompensatingTransaction GetTransaction(ITransactionContext context) 
+        private CompensatingTransaction GetTransaction(ITransactionContext context) 
         {
             const string RedisContextKey = "redis:context";
 
@@ -163,7 +163,7 @@
 
             // locking not needed here 
             // assuming 1-to-1 relathionship between current worker and context
-            var redisTransaction = context[RedisContextKey] as RedisCompensatingTransaction;
+            var redisTransaction = context[RedisContextKey] as CompensatingTransaction;
             if (redisTransaction == null)
             {
                 var db = this.redis.GetDatabase();

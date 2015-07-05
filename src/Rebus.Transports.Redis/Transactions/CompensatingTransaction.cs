@@ -5,30 +5,18 @@ using System.Threading.Tasks;
 
 namespace Rebus.Transports.Redis
 {
-    public class RedisCompensatingTransaction
+    public class CompensatingTransaction
     {
-        private const string TransactionCounterKey = "transaction:counter";
-        private const string TransactionLockKey = "rebus:transaction:{0}";
+        private readonly IDatabase database;
+        private readonly ITransaction commitTransaction = null;
+        private readonly string transactionLog = null;
 
-        private readonly Lazy<ITransaction> commitTransaction = null;
-        private readonly Lazy<string> transactionLog = null;
-        private readonly IDatabase db;
-
-        internal RedisCompensatingTransaction(IDatabase database)
+        internal CompensatingTransaction(IDatabase database, ITransaction commitTransaction, string transactionLog)
         {
-            this.db = database;
+            this.database = database;
+            this.commitTransaction = commitTransaction;
+            this.transactionLog = transactionLog;
 
-            this.commitTransaction = new Lazy<ITransaction>(() => this.db.CreateTransaction());
-
-            this.transactionLog = new Lazy<string>(() =>
-                {
-                    return (string)db.ScriptEvaluate(@"
-                        local transactionId = redis.call('INCR', 'rebus:transaction:counter')
-                        local transactionLog = 'rebus:transaction:' .. transactionId 
-                       
-                        return transactionLog
-                        ");
-                });
         }
 
         /// <summary>
@@ -41,7 +29,7 @@ namespace Rebus.Transports.Redis
         /// <param name="flags">Script flags.</param>
         public Task<RedisResult> ScriptEvaluateAsync(string script, RedisKey[] keys = null, RedisValue[] values = null, CommandFlags flags = CommandFlags.None)
         {
-            return this.commitTransaction.Value.ScriptEvaluateAsync(script, keys, values, flags);
+            return this.commitTransaction.ScriptEvaluateAsync(script, keys, values, flags);
         }
 
         /// <summary>
@@ -88,25 +76,25 @@ namespace Rebus.Transports.Redis
             string combinedScript = CompensateScript.Replace("KEYPOS", (keys.Length + 1).ToString())
                                     + script;
      
-            RedisKey[] combinedKeys = keys.Concat(new RedisKey[] { this.transactionLog.Value }).ToArray();
+            RedisKey[] combinedKeys = keys.Concat(new RedisKey[] { this.transactionLog }).ToArray();
            
-            return this.db.ScriptEvaluate(combinedScript, combinedKeys, values, flags);
+            return this.database.ScriptEvaluate(combinedScript, combinedKeys, values, flags);
         }
 
         public void Commit()
         {
-            this.commitTransaction.Value.KeyDeleteAsync(this.transactionLog.Value);
-            this.commitTransaction.Value.Execute(CommandFlags.PreferMaster);
+            this.commitTransaction.KeyDeleteAsync(this.transactionLog);
+            this.commitTransaction.Execute(CommandFlags.PreferMaster);
         }
 
         public void Rollback()
         {
-            Rollback(this.transactionLog.Value);    
+            Rollback(this.transactionLog);    
         }
 
         private void Rollback(string transactionKey)
         { 
-            this.db.ScriptEvaluate(@"
+            this.database.ScriptEvaluate(@"
                 local bytestonumber = function(str)
                   local function _b2n(num, digit, ...)
                     if not digit then return num end
@@ -127,19 +115,23 @@ namespace Rebus.Transports.Redis
                     return result
                 end
 
-                while (true) do
+                local rollback = function(key) 
+                    while (true) do
+                        local strcmd = redis.call('RPOP', key)
+                       
+                        if (strcmd == false) then
+                            return
+                        end
 
-                    local strcmd = redis.call('RPOP', KEYS[1])
-                   
-                    if (strcmd == false) then
-                        return
+                        local cmd = stringtocommand(strcmd)
+                       
+                        redis.call(unpack(cmd))
+
                     end
+                end
 
-                    local cmd = stringtocommand(strcmd)
-                   
-                    redis.call(unpack(cmd))
-
-                end", new RedisKey[] { this.transactionLog.Value });
+                rollback(KEYS[1])
+                ", new RedisKey[] { this.transactionLog });
         }
     }
 }
