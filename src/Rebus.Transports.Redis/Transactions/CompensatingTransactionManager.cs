@@ -20,7 +20,7 @@ namespace Rebus.Transports.Redis
 
                     local transactionTimeout = redis.call('GET', 'transaction:timeout')
                     if  (transactionTimeout == false) then
-                        transactionTimeout = 60
+                        transactionTimeout = 2
                     end
      
                     local transactionLock = transactionLog .. ':lock'
@@ -32,9 +32,9 @@ namespace Rebus.Transports.Redis
             return new CompensatingTransaction(database, commitTransaction, transactionLog);
         }
 
-        public void RollbackTimeoutTransactions() 
+        public void SetTransactionTimeout(uint timeoutInSeconds) 
         {
-            return;   
+            this.database.StringSet("transaction:timeout", timeoutInSeconds);
         }
     }
 }

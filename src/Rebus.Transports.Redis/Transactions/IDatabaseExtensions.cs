@@ -10,12 +10,6 @@ namespace Rebus.Transports.Redis
             CompensatingTransactionManager manager = new CompensatingTransactionManager(database);
             return manager.BeginTransaction();
         }
-
-        public static void RollbackTimeoutCompensatingTransactions(this IDatabase database) 
-        {
-            CompensatingTransactionManager manager = new CompensatingTransactionManager(database);
-            manager.RollbackTimeoutTransactions();
-        }
     }
 }
 

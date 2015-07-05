@@ -18,7 +18,7 @@
         private readonly MessagePackSerializer<RedisTransportMessage> serializer;
         private readonly string inputQueueName;
         private readonly string inputQueueKey;
-
+    
         /// <summary>
         /// Initializes a new instance of the <see cref="RedisMessageQueue" /> class.
         /// </summary>

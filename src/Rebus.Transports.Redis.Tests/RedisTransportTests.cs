@@ -3,6 +3,7 @@
     using System;
     using System.Configuration;
     using System.Threading;
+    using System.Threading.Tasks;
     using System.Transactions;
     using NUnit.Framework;
     using Rebus.Transports.Redis;
@@ -11,8 +12,6 @@
     [TestFixture(typeof(RedisMessageQueue))]
     public class RedisTransportTests: TransportTestsBase<RedisMessageQueue>
     {
-        private TimeSpan transactionTimeout = TimeSpan.FromSeconds(1);
-
         public RedisTransportTests(Type t) : base() { }
  
         [Test]
@@ -23,31 +22,40 @@
             var queue = GetQueueForTest();
             string message = "aMessage";
             string receivedBeforeRollback = null;
-            string receivedAfterRollback = null;
+            string receivedAfterTimeout = null;
 
             // Act
             queue.Send(message);
          
-            using (var transactionScope = new TransactionScope())
-            {
-                receivedBeforeRollback = queue.Receive();
+            Task.Factory.StartNew(async () =>
+                {
+                    using (var transactionScope = new TransactionScope())
+                    {
+                        receivedBeforeRollback = queue.Receive();
 
-                // force a dirty rollback, eg, without rolling back.
-                //var transactionContext = queue.GetCurrentTransactionContext();
-                //var txManager = RedisTransactionManager.Get(transactionContext);
-                //txManager.AbortWithNoRollback();
+                        // timeout
+                        await Task.Delay(TimeSpan.FromSeconds(5));
 
-                // more than timeout
-                Thread.Sleep(transactionTimeout.Add(TimeSpan.FromSeconds(2)));
-           
-                transactionScope.Dispose();
-            }
+                        transactionScope.Dispose();
+                    }
+                });
+
+            Task.Factory.StartNew(async () =>
+                {
+                    using (var transactionScope = new TransactionScope())
+                    {
+                        // timeout
+                        await Task.Delay(TimeSpan.FromSeconds(4));
+
+                        receivedAfterTimeout = queue.Receive();
+                    }
+                });
           
-            receivedAfterRollback = queue.Receive();
+            //receivedAfterRollback = queue.Receive();
 
             // Assert
             Assert.AreEqual(message, receivedBeforeRollback);
-            Assert.AreEqual(message, receivedAfterRollback);
+            Assert.AreEqual(message, receivedAfterTimeout);
         }
 
         protected override IDuplexTransport GetTransport(string queueName)

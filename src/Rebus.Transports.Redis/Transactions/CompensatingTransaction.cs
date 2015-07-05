@@ -16,7 +16,6 @@ namespace Rebus.Transports.Redis
             this.database = database;
             this.commitTransaction = commitTransaction;
             this.transactionLog = transactionLog;
-
         }
 
         /// <summary>
@@ -89,7 +88,7 @@ namespace Rebus.Transports.Redis
 
         public void Rollback()
         {
-            Rollback(this.transactionLog);    
+            Rollback(this.transactionLog);
         }
 
         private void Rollback(string transactionKey)
@@ -126,8 +125,9 @@ namespace Rebus.Transports.Redis
                         local cmd = stringtocommand(strcmd)
                        
                         redis.call(unpack(cmd))
-
                     end
+
+                    redis.call('DEL', key)
                 end
 
                 rollback(KEYS[1])

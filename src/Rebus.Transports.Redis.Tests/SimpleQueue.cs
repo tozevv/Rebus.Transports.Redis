@@ -18,28 +18,6 @@
             this.transport = transport;
         }
 
-        public ITransactionContext GetCurrentTransactionContext()
-        {
-            if (Transaction.Current == null)
-            {
-                return new NoTransaction();
-            }
-
-            // store ambient transaction in logical data context
-            AmbientTransactionContext trans = CallContext.LogicalGetData("ambientTrans")
-                as AmbientTransactionContext;
-
-            if (trans == null)
-            {
-                trans = new AmbientTransactionContext();
-                CallContext.LogicalSetData("ambientTrans", trans);
-                Transaction.Current.TransactionCompleted += (o, e) => {
-                    CallContext.LogicalSetData("ambientTrans", null);
-                };
-            }
-            return trans;
-        }
-
         public void Send(T message, TimeSpan? expire = null)
         {
             var transactionContext = GetCurrentTransactionContext();
@@ -84,6 +62,28 @@
                 receivedMessages.Add(receivedMessage);
             }
             return receivedMessages;
+        }
+
+        private ITransactionContext GetCurrentTransactionContext()
+        {
+            if (Transaction.Current == null)
+            {
+                return new NoTransaction();
+            }
+
+            // store ambient transaction in logical data context
+            AmbientTransactionContext trans = CallContext.LogicalGetData("ambientTrans")
+                as AmbientTransactionContext;
+
+            if (trans == null)
+            {
+                trans = new AmbientTransactionContext();
+                CallContext.LogicalSetData("ambientTrans", trans);
+                Transaction.Current.TransactionCompleted += (o, e) => {
+                    CallContext.LogicalSetData("ambientTrans", null);
+                };
+            }
+            return trans;
         }
     }
 }
