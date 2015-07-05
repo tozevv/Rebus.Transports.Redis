@@ -11,35 +11,48 @@ namespace Rebus.Transports.Redis
         private const string TransactionLockKey = "rebus:transaction:{0}";
 
         private readonly Lazy<ITransaction> commitTransaction = null;
-        private readonly Lazy<string> transactionKey = null;
+        private readonly Lazy<string> transactionLog = null;
         private readonly IDatabase db;
 
         internal RedisCompensatingTransaction(IDatabase database, TimeSpan transactionTimeout)
         {
             this.db = database;
-           
-            long timeoutInSeconds = Convert.ToInt64(transactionTimeout.TotalSeconds);
 
             this.commitTransaction = new Lazy<ITransaction>(() => this.db.CreateTransaction());
-            this.transactionKey = new Lazy<string>(() =>
+
+            this.transactionLog = new Lazy<string>(() =>
                 {
                     return (string)db.ScriptEvaluate(@"
-                        local transactionId = redis.call('INCR', 'transaction:counter')
-                        local key = 'transaction' .. ':' .. transactionId
-
-                        redis.call('SET', key, transactionId)
-                        redis.call('EXPIRE', key, ARGV[1]) 
-                        return key
-                        ", null, new RedisValue[] { timeoutInSeconds });
+                        local transactionId = redis.call('INCR', 'rebus:transaction:counter')
+                        local transactionLog = 'rebus:transaction:' .. transactionId 
+                       
+                        return transactionLog
+                        ");
                 });
         }
 
+        /// <summary>
+        /// Evaluate async on commit and therefore does not require compensation.
+        /// </summary>
+        /// <returns>The script evaluation result.</returns>
+        /// <param name="script">Script to execute.</param>
+        /// <param name="keys">Keys script parameters.</param>
+        /// <param name="values">Values script parameters.</param>
+        /// <param name="flags">Script flags.</param>
         public Task<RedisResult> ScriptEvaluateAsync(string script, RedisKey[] keys = null, RedisValue[] values = null, CommandFlags flags = CommandFlags.None)
         {
             return this.commitTransaction.Value.ScriptEvaluateAsync(script, keys, values, flags);
         }
 
-        public RedisResult ScriptEvaluateWithCompensation(string script, RedisKey[] keys = null, RedisValue[] values = null, CommandFlags flags = CommandFlags.None)
+        /// <summary>
+        /// Scripts  evaluate immediately and provide compensation semantigs
+        /// </summary>
+        /// <returns>The script evaluation result.</returns>
+        /// <param name="script">Script to execute.</param>
+        /// <param name="keys">Keys script parameters.</param>
+        /// <param name="values">Values script parameters.</param>
+        /// <param name="flags">Script flags.</param>
+        public RedisResult ScriptEvaluate(string script, RedisKey[] keys = null, RedisValue[] values = null, CommandFlags flags = CommandFlags.None)
         {
             const string CompensateScript = @"
                 local numbertobytes = function(num, width)
@@ -75,30 +88,22 @@ namespace Rebus.Transports.Redis
             string combinedScript = CompensateScript.Replace("KEYPOS", (keys.Length + 1).ToString())
                                     + script;
      
-
-            RedisKey[] combinedKeys = keys.Concat(new RedisKey[] { TransactionLogKey }).ToArray();
+            RedisKey[] combinedKeys = keys.Concat(new RedisKey[] { this.transactionLog.Value }).ToArray();
            
             return this.db.ScriptEvaluate(combinedScript, combinedKeys, values, flags);
         }
 
         public void Commit()
         {
-            this.commitTransaction.Value.KeyDeleteAsync(this.transactionKey.Value);
-            this.commitTransaction.Value.KeyDeleteAsync(TransactionLogKey);
+            this.commitTransaction.Value.KeyDeleteAsync(this.transactionLog.Value);
             this.commitTransaction.Value.Execute(CommandFlags.PreferMaster);
         }
 
         public void Rollback()
         {
-            Rollback(this.transactionKey.Value);    
+            Rollback(this.transactionLog.Value);    
         }
 
-        private string TransactionLogKey
-        {
-            get {
-                return this.transactionKey.Value + ":log";
-            }
-        }
         private void Rollback(string transactionKey)
         { 
             this.db.ScriptEvaluate(@"
@@ -125,15 +130,16 @@ namespace Rebus.Transports.Redis
                 while (true) do
 
                     local strcmd = redis.call('RPOP', KEYS[1])
-                    redis.log(redis.LOG_WARNING, strcmd)
-
+                   
                     if (strcmd == false) then
                         return
                     end
+
                     local cmd = stringtocommand(strcmd)
-                    redis.log(redis.LOG_WARNING, cmd)
+                   
                     redis.call(unpack(cmd))
-                end", new RedisKey[] { TransactionLogKey });
+
+                end", new RedisKey[] { this.transactionLog.Value });
         }
     }
 }

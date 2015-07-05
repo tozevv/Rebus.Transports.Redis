@@ -102,7 +102,7 @@
             {
                 RedisCompensatingTransaction transaction = GetTransaction(context);
 
-                RedisResult result = transaction.ScriptEvaluateWithCompensation(
+                RedisResult result = transaction.ScriptEvaluate(
                     @"
                     -- get message id from the queue and move it to the rollback queue
                     local message_id = redis.call('RPOP', KEYS[1])
