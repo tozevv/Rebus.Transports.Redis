@@ -18,6 +18,39 @@ namespace Rebus.Transports.Redis
             this.transactionLog = transactionLog;
         }
 
+        public static CompensatingTransaction BeginTransaction(IDatabase database) 
+        {
+            string[] transactionInfo = 
+                (string[])database.ScriptEvaluate(@"
+                    local transactionId = redis.call('INCR', 'transaction:counter')
+                    local transactionLog = 'transaction:' .. transactionId
+                    
+                    redis.call('ZADD', 'transaction:current', transactionId, transactionLog)
+                    
+                    local transactionTimeout = redis.call('GET', 'transaction:timeout')
+                    if  (transactionTimeout == false) then
+                        transactionTimeout = 60
+                    end
+     
+                    local transactionLock = transactionLog .. ':lock'
+                    redis.call('SETEX', transactionLock, transactionTimeout, '1')
+                  
+                    return { transactionLog, transactionLock }
+                    ");
+            string transactionLog = transactionInfo[0];
+            string transactionLock = transactionInfo[1];
+
+            ITransaction commitTransaction = database.CreateTransaction();
+
+            commitTransaction.AddCondition(Condition.KeyExists(transactionLock));
+
+            commitTransaction.KeyDeleteAsync(transactionLog);
+            commitTransaction.KeyDeleteAsync(transactionLock);
+            commitTransaction.SetRemoveAsync("transaction:current", transactionLog);
+
+            return new CompensatingTransaction(database, commitTransaction, transactionLog);
+        }
+
         /// <summary>
         /// Evaluate async on commit and therefore does not require compensation.
         /// </summary>
@@ -82,8 +115,11 @@ namespace Rebus.Transports.Redis
 
         public void Commit()
         {
-            this.commitTransaction.KeyDeleteAsync(this.transactionLog);
-            this.commitTransaction.Execute(CommandFlags.PreferMaster);
+            if (!this.commitTransaction.Execute(CommandFlags.PreferMaster))
+            {
+                throw new TimeoutException("Transaction timed out");
+            }
+
         }
 
         public void Rollback()
@@ -113,13 +149,13 @@ namespace Rebus.Transports.Redis
                     end
                     return result
                 end
-
+ 
                 local rollback = function(key) 
                     while (true) do
                         local strcmd = redis.call('RPOP', key)
                        
                         if (strcmd == false) then
-                            return
+                            break
                         end
 
                         local cmd = stringtocommand(strcmd)
@@ -128,6 +164,9 @@ namespace Rebus.Transports.Redis
                     end
 
                     redis.call('DEL', key)
+                    redis.call('DEL', key .. ':lock')
+                    redis.call('ZREM', 'transaction:current', key)
+                
                 end
 
                 rollback(KEYS[1])

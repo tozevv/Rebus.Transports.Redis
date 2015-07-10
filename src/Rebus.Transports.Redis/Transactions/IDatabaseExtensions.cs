@@ -7,8 +7,7 @@ namespace Rebus.Transports.Redis
     {
         public static CompensatingTransaction BeginCompensatingTransaction(this IDatabase database)
         {
-            CompensatingTransactionManager manager = new CompensatingTransactionManager(database);
-            return manager.BeginTransaction();
+            return CompensatingTransaction.BeginTransaction(database);
         }
     }
 }
