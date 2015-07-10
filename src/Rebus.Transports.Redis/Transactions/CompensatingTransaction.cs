@@ -9,46 +9,91 @@ namespace Rebus.Transports.Redis
     {
         private readonly IDatabase database;
         private readonly ITransaction commitTransaction = null;
-        private readonly string transactionLog = null;
+        private readonly string transactionKey = null;
 
-        internal CompensatingTransaction(IDatabase database, ITransaction commitTransaction, string transactionLog)
+        private const string createTx = @"
+            local createtx = function() 
+                local transactionId = redis.call('INCR', 'transaction:counter')
+                local transactionKey = 'transaction:' .. transactionId
+                
+                redis.call('ZADD', 'transaction:current', transactionId, transactionKey)
+                
+                local transactionTimeout = redis.call('GET', 'transaction:timeout')
+                if  (transactionTimeout == false) then
+                    transactionTimeout = 60
+                end
+
+                local transactionLock = transactionKey .. ':lock'
+                redis.call('SETEX', transactionLock, transactionTimeout, '1')
+
+                return transactionKey
+            end
+        ";
+        
+        private const string disposeTx = @"
+            local disposetx = function(key) 
+                redis.call('DEL', key)
+                redis.call('DEL', key .. ':lock')
+                redis.call('ZREM', 'transaction:current', key)
+            end
+        ";
+
+        private const string rollbackScript = disposeTx +
+           @"
+                local bytestonumber = function(str)
+                  local function _b2n(num, digit, ...)
+                    if not digit then return num end
+                    return _b2n(num*256 + digit, ...)
+                  end
+                  return _b2n(0, string.byte(str, 1, -1))
+                end
+
+                local stringtocommand = function(str)
+                    local result = {}
+                    local i = 4
+                    while (i < string.len(str)) do
+                        local size = bytestonumber(string.sub(str, i - 3, i))
+                        local arg = string.sub(str, i + 1, i + size)
+                        table.insert(result, arg)
+                        i = i + size + 4
+                    end
+                    return result
+                end
+ 
+                local rollback = function(key) 
+                    while (true) do
+                        local strcmd = redis.call('RPOP', key)
+                       
+                        if (strcmd == false) then
+                            break
+                        end
+
+                        local cmd = stringtocommand(strcmd)
+                       
+                        redis.call(unpack(cmd))
+                    end
+
+                    disposetx(key)
+                end";
+        
+        internal CompensatingTransaction(IDatabase database, ITransaction commitTransaction, string transactionKey)
         {
             this.database = database;
             this.commitTransaction = commitTransaction;
-            this.transactionLog = transactionLog;
+            this.transactionKey = transactionKey;
         }
 
         public static CompensatingTransaction BeginTransaction(IDatabase database) 
         {
-            string[] transactionInfo = 
-                (string[])database.ScriptEvaluate(@"
-                    local transactionId = redis.call('INCR', 'transaction:counter')
-                    local transactionLog = 'transaction:' .. transactionId
-                    
-                    redis.call('ZADD', 'transaction:current', transactionId, transactionLog)
-                    
-                    local transactionTimeout = redis.call('GET', 'transaction:timeout')
-                    if  (transactionTimeout == false) then
-                        transactionTimeout = 60
-                    end
-     
-                    local transactionLock = transactionLog .. ':lock'
-                    redis.call('SETEX', transactionLock, transactionTimeout, '1')
-                  
-                    return { transactionLog, transactionLock }
-                    ");
-            string transactionLog = transactionInfo[0];
-            string transactionLock = transactionInfo[1];
-
+            string transactionKey = 
+                (string)database.ScriptEvaluate(@createTx + " return createtx()");
+            
             ITransaction commitTransaction = database.CreateTransaction();
 
-            commitTransaction.AddCondition(Condition.KeyExists(transactionLock));
+            commitTransaction.AddCondition(Condition.KeyExists(transactionKey + ":lock"));
+            commitTransaction.ScriptEvaluateAsync(@disposeTx + " return disposetx()");
 
-            commitTransaction.KeyDeleteAsync(transactionLog);
-            commitTransaction.KeyDeleteAsync(transactionLock);
-            commitTransaction.SetRemoveAsync("transaction:current", transactionLog);
-
-            return new CompensatingTransaction(database, commitTransaction, transactionLog);
+            return new CompensatingTransaction(database, commitTransaction, transactionKey);
         }
 
         /// <summary>
@@ -108,69 +153,48 @@ namespace Rebus.Transports.Redis
             string combinedScript = CompensateScript.Replace("KEYPOS", (keys.Length + 1).ToString())
                                     + script;
      
-            RedisKey[] combinedKeys = keys.Concat(new RedisKey[] { this.transactionLog }).ToArray();
+            RedisKey[] combinedKeys = keys.Concat(new RedisKey[] { this.transactionKey }).ToArray();
            
             return this.database.ScriptEvaluate(combinedScript, combinedKeys, values, flags);
         }
 
         public void Commit()
         {
+            //EnsureTimeoutsRollback();
             if (!this.commitTransaction.Execute(CommandFlags.PreferMaster))
             {
                 throw new TimeoutException("Transaction timed out");
             }
-
         }
 
         public void Rollback()
         {
-            Rollback(this.transactionLog);
+            this.database.ScriptEvaluate(rollbackScript + " return rollback(KEYS[1])", 
+                new RedisKey[] { this.transactionKey });
         }
 
-        private void Rollback(string transactionKey)
-        { 
-            this.database.ScriptEvaluate(@"
-                local bytestonumber = function(str)
-                  local function _b2n(num, digit, ...)
-                    if not digit then return num end
-                    return _b2n(num*256 + digit, ...)
-                  end
-                  return _b2n(0, string.byte(str, 1, -1))
-                end
-
-                local stringtocommand = function(str)
-                    local result = {}
-                    local i = 4
-                    while (i < string.len(str)) do
-                        local size = bytestonumber(string.sub(str, i - 3, i))
-                        local arg = string.sub(str, i + 1, i + size)
-                        table.insert(result, arg)
-                        i = i + size + 4
-                    end
-                    return result
-                end
- 
-                local rollback = function(key) 
-                    while (true) do
-                        local strcmd = redis.call('RPOP', key)
-                       
-                        if (strcmd == false) then
-                            break
+        public void EnsureTimeoutsRollback() 
+        {
+            RedisResult nextExpiring = this.database.ScriptEvaluate(rollbackScript + @"
+                while (true) 
+                    local transactionKey = redis.call('transaction:current', 0, 0);
+                    if (transactionKey == false) then 
+                        local transactionTimeout = redis.call('GET', 'transaction:timeout')
+                        if  (transactionTimeout == false) then
+                            transactionTimeout = 60
                         end
-
-                        local cmd = stringtocommand(strcmd)
-                       
-                        redis.call(unpack(cmd))
+                        return transactionTimeout
                     end
 
-                    redis.call('DEL', key)
-                    redis.call('DEL', key .. ':lock')
-                    redis.call('ZREM', 'transaction:current', key)
-                
-                end
+                    local ttl = redis.call('TTL', current .. ':lock')
 
-                rollback(KEYS[1])
-                ", new RedisKey[] { this.transactionLog });
+                    if (ttl < 0) then
+                        rollback(transactionKey) 
+                    else
+                        return ttl
+                    end 
+                end
+            ", null, null, CommandFlags.None);
         }
     }
 }
