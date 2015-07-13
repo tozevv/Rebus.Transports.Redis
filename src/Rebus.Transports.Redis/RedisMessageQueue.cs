@@ -20,15 +20,13 @@
         private readonly MessagePackSerializer<RedisTransportMessage> serializer;
         private readonly string inputQueueName;
         private readonly string inputQueueKey;
-        private readonly TimeSpan transactionTimeout;
-
+      
         /// <summary>
         /// Initializes a new instance of the <see cref="RedisMessageQueue" /> class.
         /// </summary>
         /// <param name="configOptions">Redis connection configuration options.</param>
         /// <param name="inputQueueName">Name of the input queue.</param>
-        /// <param name="transactionTimeout">Transaction timeout to use if transactions enable.</param>
-        public RedisMessageQueue(ConfigurationOptions configOptions, string inputQueueName, TimeSpan? transactionTimeout = null)
+        public RedisMessageQueue(ConfigurationOptions configOptions, string inputQueueName)
         {
             var tw = new StringWriter();
             try
@@ -43,7 +41,6 @@
             this.serializer = MessagePackSerializer.Get<RedisTransportMessage>();
             this.inputQueueName = inputQueueName;
             this.inputQueueKey = string.Format(QueueKeyFormat, this.inputQueueName);
-            this.transactionTimeout = transactionTimeout ?? TimeSpan.FromSeconds(30);
         }
 
         public string InputQueue
@@ -63,7 +60,7 @@
            
             if (context.IsTransactional)
             {
-                var tx = RedisTransactionManager.GetOrCreate(context, db, transactionTimeout).CommitTx;
+                var tx = RedisTransactionManager.GetOrCreate(context, db).CommitTx;
                 InternalSend(tx, destinationQueueKey, message);
             }
             else
@@ -81,7 +78,7 @@
 
             if (context.IsTransactional)
             {
-                var txManager = RedisTransactionManager.GetOrCreate(context, db, transactionTimeout);
+                var txManager = RedisTransactionManager.GetOrCreate(context, db);
 
                 RedisKey rollbackQueueKey = string.Format(RollbackQueueKeyFormat, this.inputQueueName, txManager.TransactionId);
                 RedisKey transactionSetKey = string.Format(TransactionSetKeyFormat, this.inputQueueName);

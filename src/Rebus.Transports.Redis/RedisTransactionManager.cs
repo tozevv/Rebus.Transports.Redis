@@ -18,7 +18,6 @@
         private readonly Lazy<ITransaction> commitTx;
         private readonly Lazy<ITransaction> rollbackTx;
         private readonly ITransactionContext context;
-        private readonly TimeSpan timeout;
         private bool dirtyAbort = false;
      
         /// <summary>
@@ -26,12 +25,11 @@
         /// </summary>
         /// <param name="context">Rebus transaction Context.</param>
         /// <param name="db">Rebus database instance.</param>
-        /// <param name="timeout">Transaction timeout.</param>
-        public RedisTransactionManager(ITransactionContext context, IDatabase db, TimeSpan timeout)
+        public RedisTransactionManager(ITransactionContext context, IDatabase db)
         {
             this.db = db;
             this.context = context;
-            this.timeout = timeout;
+          
             commitTx = new Lazy<ITransaction>(() => this.db.CreateTransaction());
             rollbackTx = new Lazy<ITransaction>(() => this.db.CreateTransaction());
         }
@@ -42,7 +40,7 @@
         public void BeginTransaction()
         {
             this.TransactionId = db.StringIncrement(TransactionCounterKey);
-            db.StringSet(string.Format(TransactionLockKey, this.TransactionId), this.TransactionId, timeout, When.Always);
+            db.StringSet(string.Format(TransactionLockKey, this.TransactionId), this.TransactionId, TimeSpan.FromSeconds(30), When.Always);
      
             context.DoCommit += () =>
 			{
@@ -139,9 +137,8 @@
         /// <returns>The or create.</returns>
         /// <param name="context">Rebus transaction context.</param>
         /// <param name="database">Redis database instance.</param>
-        /// <param name="transactionTimeout">Transaction timeout.</param>
         /// <returns>The active RedisTransactionManager.</returns>
-        public static RedisTransactionManager GetOrCreate(ITransactionContext context, IDatabase database, TimeSpan transactionTimeout)
+        public static RedisTransactionManager GetOrCreate(ITransactionContext context, IDatabase database)
         {
             if (! context.IsTransactional)
             {
@@ -152,7 +149,7 @@
             var redisTransaction = context[RedisContextKey] as RedisTransactionManager;
             if (redisTransaction == null)
             {
-                redisTransaction = new RedisTransactionManager(context, database, transactionTimeout);
+                redisTransaction = new RedisTransactionManager(context, database);
                 redisTransaction.BeginTransaction();
 
                 context[RedisContextKey] = redisTransaction;
