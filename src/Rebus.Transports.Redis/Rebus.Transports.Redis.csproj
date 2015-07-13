@@ -56,6 +56,8 @@
     <Compile Include="RedisMessageQueueConfigurationExtension.cs" />
     <Compile Include="RedisTransactionManager.cs" />
     <Compile Include="RedisTransportMessage.cs" />
+    <Compile Include="Transactions\IDatabaseExtensions.cs" />
+    <Compile Include="Transactions\ManagedTransaction.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -70,4 +72,7 @@
   </Target>
   -->
   <ItemGroup />
+  <ItemGroup>
+    <Folder Include="Transactions\" />
+  </ItemGroup>
 </Project>
